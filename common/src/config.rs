@@ -23,6 +23,8 @@ pub struct Config {
     pub web_server: WebServerConfig,
     #[serde(default)]
     pub moonlight: MoonlightConfig,
+    #[serde(default)]
+    pub host_agent: HostAgentConfig,
     #[serde(default = "default_streamer_path")]
     pub streamer_path: String,
     #[serde(default)]
@@ -40,6 +42,7 @@ impl Default for Config {
             streamer_path: default_streamer_path(),
             web_server: Default::default(),
             moonlight: Default::default(),
+            host_agent: Default::default(),
             webrtc: Default::default(),
             log: Default::default(),
             #[allow(deprecated)]
@@ -337,6 +340,31 @@ fn default_moonlight_http_port() -> u16 {
 
 fn default_pair_device_name() -> String {
     "roth".to_string()
+}
+
+// -- Host Agent
+
+/// The monitoring agent (agent/windows) running on the hosts, queried by the admin monitor
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HostAgentConfig {
+    #[serde(default = "default_host_agent_port")]
+    pub port: u16,
+    /// Bearer token shared with the agents, the monitor is disabled when this is None
+    #[serde(default)]
+    pub token: Option<String>,
+}
+
+impl Default for HostAgentConfig {
+    fn default() -> Self {
+        Self {
+            port: default_host_agent_port(),
+            token: None,
+        }
+    }
+}
+
+fn default_host_agent_port() -> u16 {
+    47995
 }
 
 fn default_streamer_path() -> String {

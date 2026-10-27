@@ -1,4 +1,7 @@
-use std::fmt::{Display, Formatter};
+use std::{
+    collections::HashMap,
+    fmt::{Display, Formatter},
+};
 
 use moonlight_common::{
     ServerState,
@@ -221,6 +224,85 @@ pub struct PostCancelRequest {
 #[ts(export, export_to = EXPORT_PATH)]
 pub struct PostCancelResponse {
     pub success: bool,
+}
+
+// -- Admin Monitor
+
+#[derive(Serialize, Deserialize, Debug, TS, Clone)]
+#[ts(export, export_to = EXPORT_PATH)]
+pub struct AgentGpuStats {
+    pub name: String,
+    pub utilization_percent: f64,
+    #[ts(type = "number")]
+    pub memory_total_bytes: u64,
+    #[ts(type = "number")]
+    pub memory_used_bytes: u64,
+    #[ts(type = "number")]
+    pub shared_memory_used_bytes: u64,
+    pub engines: HashMap<String, f64>,
+}
+
+/// Returned by the agent running on the host
+#[derive(Serialize, Deserialize, Debug, TS, Clone)]
+#[ts(export, export_to = EXPORT_PATH)]
+pub struct AgentStats {
+    pub hostname: String,
+    #[ts(type = "number")]
+    pub uptime_secs: u64,
+    pub cpu_percent: f64,
+    pub cpu_cores: u32,
+    #[ts(type = "number")]
+    pub memory_total_bytes: u64,
+    #[ts(type = "number")]
+    pub memory_used_bytes: u64,
+    pub gpus: Vec<AgentGpuStats>,
+}
+
+#[derive(Serialize, Deserialize, Debug, TS)]
+#[ts(export, export_to = EXPORT_PATH)]
+pub struct AdminHostMonitor {
+    pub host_id: u32,
+    pub name: String,
+    pub address: String,
+    pub paired: PairStatus,
+    pub agent: Option<AgentStats>,
+    pub agent_error: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, TS)]
+#[ts(export, export_to = EXPORT_PATH)]
+pub struct AdminActiveStream {
+    pub stream_id: u32,
+    pub user_name: String,
+    pub host_id: u32,
+    pub host_name: String,
+    pub app_name: String,
+    #[ts(type = "number")]
+    pub started_unix_secs: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug, TS)]
+#[ts(export, export_to = EXPORT_PATH)]
+pub struct GetAdminMonitorResponse {
+    pub agent_enabled: bool,
+    pub hosts: Vec<AdminHostMonitor>,
+    pub streams: Vec<AdminActiveStream>,
+}
+
+#[derive(Serialize, Deserialize, Debug, TS)]
+#[ts(export, export_to = EXPORT_PATH)]
+pub struct AdminTerminateHostResult {
+    pub host_id: u32,
+    pub name: String,
+    pub success: bool,
+    pub error: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, TS)]
+#[ts(export, export_to = EXPORT_PATH)]
+pub struct PostAdminTerminateAllResponse {
+    pub streams_stopped: u32,
+    pub hosts: Vec<AdminTerminateHostResult>,
 }
 
 #[derive(Serialize, Deserialize, Debug, TS)]

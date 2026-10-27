@@ -1,4 +1,5 @@
 use std::{
+    future::pending,
     process::Stdio,
     sync::atomic::{AtomicUsize, Ordering},
     time::Duration,
@@ -18,12 +19,13 @@ use common::{
     serialize_json,
 };
 use log::{debug, error, info, warn};
-use tokio::{process::Command, spawn, time::sleep};
+use tokio::{process::Command, select, spawn, sync::watch, time::sleep};
 use tracing::{Level, instrument, span};
 
 use crate::app::{
     App, AppError,
     host::{AppId, HostId},
+    streams::ActiveStreamInfo,
     user::AuthenticatedUser,
 };
 
@@ -187,6 +189,17 @@ pub async fn start_host(
             }
         };
 
+        // Names for the admin stream list, a lookup failure must not prevent the stream
+        let user_name = match user.detailed_user().await {
+            Ok(detailed) => detailed.name,
+            Err(_) => user.id().to_string(),
+        };
+        let host_name = match host.undetailed_host_cached(&mut user).await {
+            Ok(undetailed) => undetailed.name,
+            Err(_) => address.clone(),
+        };
+        let app_name = app.title.clone();
+
         // -- Send App info
         let _ = send_ws_message(
             &mut session,
@@ -264,12 +277,36 @@ pub async fn start_host(
         >(span, stdin, stdout, child.stderr.take())
         .await;
 
+        let (stream_guard, mut stop_receiver) = web_app.streams().register(ActiveStreamInfo {
+            user_name,
+            host_id: host_id.0,
+            host_name,
+            app_name,
+        });
+
         // Redirect ipc message into ws
         spawn({
             let mut ipc_sender = ipc_sender.clone();
             async move {
+                // Unregisters the stream once this task, which owns the child, is done
+                let _stream_guard = stream_guard;
+
                 let mut warned_closed = false;
-                while let Some(message) = ipc_receiver.recv().await {
+                let mut stopped_by_admin = false;
+                loop {
+                    let message = select! {
+                        message = ipc_receiver.recv() => message,
+                        () = stop_requested(&mut stop_receiver) => {
+                            info!("[Stream]: stopped by admin");
+                            stopped_by_admin = true;
+                            ipc_sender.send(ServerIpcMessage::Stop).await;
+                            None
+                        }
+                    };
+                    let Some(message) = message else {
+                        break;
+                    };
+
                     match message {
                         StreamerIpcMessage::WebSocket(message) => {
                             if let Err(Closed) = send_ws_message(&mut session, message).await
@@ -301,8 +338,8 @@ pub async fn start_host(
                 }
                 info!("[Ipc]: ipc receiver is closed");
 
-                // Wait for the child to shutdown
-                sleep(Duration::from_secs(10)).await;
+                // Wait for the child to shutdown, an admin stop shouldn't take that long
+                sleep(Duration::from_secs(if stopped_by_admin { 2 } else { 10 })).await;
 
                 // close the websocket when the streamer crashed / disconnected / whatever
                 if let Err(err) = session.close(None).await {
@@ -358,6 +395,13 @@ pub async fn start_host(
     });
 
     Ok(response)
+}
+
+/// Completes once the admin requested a stop, never if the registry entry is gone
+async fn stop_requested(receiver: &mut watch::Receiver<bool>) {
+    if receiver.wait_for(|stop| *stop).await.is_err() {
+        pending::<()>().await;
+    }
 }
 
 async fn send_ws_message(sender: &mut Session, message: StreamServerMessage) -> Result<(), Closed> {

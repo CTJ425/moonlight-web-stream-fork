@@ -24,6 +24,7 @@ use crate::app::{
         Either, Storage, StorageHostModify, StorageRoleAdd, StorageRoleDefaultSettings,
         StorageRolePermissions, StorageUserAdd, create_storage,
     },
+    streams::StreamRegistry,
     user::{Admin, AuthenticatedUser, RoleType, User, UserId},
 };
 
@@ -32,6 +33,7 @@ pub mod host;
 pub mod password;
 pub mod role;
 pub mod storage;
+pub mod streams;
 pub mod user;
 
 #[derive(Debug, Error)]
@@ -136,6 +138,7 @@ struct AppInner {
     config: Config,
     storage: Arc<dyn Storage + Send + Sync>,
     app_image_cache: RwLock<HashMap<(UserId, HostId, AppId), Bytes>>,
+    streams: Arc<StreamRegistry>,
 }
 
 pub type MoonlightClient = TokioHyperClient;
@@ -150,6 +153,7 @@ impl App {
             storage: create_storage(config.data_storage.clone()).await?,
             config,
             app_image_cache: Default::default(),
+            streams: Default::default(),
         };
 
         Ok(Self {
@@ -165,6 +169,10 @@ impl App {
 
     pub fn config(&self) -> &Config {
         &self.inner.config
+    }
+
+    pub fn streams(&self) -> &Arc<StreamRegistry> {
+        &self.inner.streams
     }
 
     /// Handles all logic related to adding the first user:

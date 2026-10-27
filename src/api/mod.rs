@@ -6,6 +6,7 @@ use actix_web::{
 };
 
 use crate::api::{
+    admin::{get_monitor, post_terminate_all},
     app::{get_app_image, get_apps},
     auth::auth_middleware,
     host::{delete_host, get_host, list_hosts, pair_host, patch_host, post_host, wake_host},
@@ -14,6 +15,7 @@ use crate::api::{
     user::{add_user, delete_user, get_user, list_users, patch_user},
 };
 
+pub mod admin;
 pub mod app;
 pub mod auth;
 pub mod host;
@@ -73,5 +75,10 @@ pub fn api_service() -> impl HttpServiceFactory {
             // -- Stream
             stream::start_host,
             stream::cancel_host,
+        ])
+        .service(services![
+            // -- Admin
+            get_monitor,
+            post_terminate_all,
         ])
 }

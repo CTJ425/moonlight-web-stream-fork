@@ -1,4 +1,4 @@
-import { App, DeleteHostQuery, DeleteUserRequest, DetailedHost, DetailedUser, GetAppImageQuery, GetAppsQuery, GetAppsResponse, GetHostQuery, GetHostResponse, GetHostsResponse, GetUserQuery, GetUsersResponse, PatchUserRequest, PostCancelRequest, PostCancelResponse, PostLoginRequest, PostPairRequest, PostPairResponse1, PostPairResponse2, PostUserRequest, PostWakeUpRequest, PostHostRequest, PostHostResponse, UndetailedHost, PatchHostRequest, GetRolesResponse, UndetailedRole, GetRoleResponse, GetRoleQuery, DeleteRoleQuery, PatchRoleRequest, PostRoleResponse, PostRoleRequest, DetailedRole } from "./api_bindings.js";
+import { App, DeleteHostQuery, DeleteUserRequest, DetailedHost, DetailedUser, GetAppImageQuery, GetAppsQuery, GetAppsResponse, GetHostQuery, GetHostResponse, GetHostsResponse, GetUserQuery, GetUsersResponse, PatchUserRequest, PostCancelRequest, PostCancelResponse, PostLoginRequest, PostPairRequest, PostPairResponse1, PostPairResponse2, PostUserRequest, PostWakeUpRequest, PostHostRequest, PostHostResponse, UndetailedHost, PatchHostRequest, GetRolesResponse, UndetailedRole, GetRoleResponse, GetRoleQuery, DeleteRoleQuery, PatchRoleRequest, PostRoleResponse, PostRoleRequest, DetailedRole, GetAdminMonitorResponse, PostAdminTerminateAllResponse } from "./api_bindings.js";
 import { showNotification } from "./component/notification.js";
 import { showMessage, showModal } from "./component/modal/index.js";
 import { ApiUserPasswordPrompt } from "./component/modal/login.js";
@@ -422,4 +422,19 @@ export async function apiHostCancel(api: Api, request: PostCancelRequest): Promi
     })
 
     return response as PostCancelResponse
+}
+
+export async function apiGetAdminMonitor(api: Api): Promise<GetAdminMonitorResponse> {
+    const response = await fetchApi(api, "/admin/monitor", GET, {
+        response: "json"
+    })
+
+    return response as GetAdminMonitorResponse
+}
+export async function apiPostAdminTerminateAll(api: Api): Promise<PostAdminTerminateAllResponse> {
+    const response = await fetchApi(api, "/admin/terminate_all", POST, {
+        response: "json"
+    }, 30000)
+
+    return response as PostAdminTerminateAllResponse
 }
