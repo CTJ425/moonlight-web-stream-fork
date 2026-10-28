@@ -58,7 +58,7 @@ pub async fn start_host(
         loop {
             message = match stream.recv().await {
                 Some(Ok(Message::Text(text))) => text,
-                Some(Ok(Message::Binary(_))) => {
+                Some(Ok(Message::Binary(_))) | Some(Ok(Message::Close(_))) => {
                     return;
                 }
                 Some(Ok(_)) => continue,
@@ -440,6 +440,13 @@ pub async fn start_host(
                         .send(ServerIpcMessage::WebSocketTransport(binary))
                         .await;
                 }
+                Message::Ping(bytes) => {
+                    if ping_session.pong(&bytes).await.is_err() {
+                        break;
+                    }
+                }
+                // the client may keep the tcp connection open while waiting for our close reply
+                Message::Close(_) => break,
                 _ => {}
             }
         }

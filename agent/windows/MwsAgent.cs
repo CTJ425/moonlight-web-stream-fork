@@ -250,7 +250,7 @@ class Agent
             string key = luid + "|" + e.Groups[1].Value + "|" + e.Groups[2].Value;
             double value = CounterSample.Calculate(prev, sample);
             // a reused instance name or a counter reset gives a negative or invalid delta
-            if (double.IsNaN(value) || double.IsInfinity(value) || value <= 0.0) continue;
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0.0) continue;
             double sum;
             perEngine.TryGetValue(key, out sum);
             perEngine[key] = sum + value;
