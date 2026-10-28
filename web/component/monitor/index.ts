@@ -3,6 +3,7 @@ import { AdminActiveStream, AdminHostMonitor, AgentGpuStats, GetAdminMonitorResp
 import { getCurrentLanguage, getTranslations } from "../../i18n.js";
 import { Component } from "../index.js";
 import { showMessage, showModal } from "../modal/index.js";
+import { showNotification } from "../notification.js";
 import { FormModal } from "../modal/form.js";
 
 const POLL_INTERVAL_MS = 2000
@@ -24,6 +25,7 @@ export class MonitorPanel implements Component {
 
     private pollTimer: number | null = null
     private fetching = false
+    private lastFetchFailed = false
 
     constructor(api: Api) {
         this.api = api
@@ -62,6 +64,13 @@ export class MonitorPanel implements Component {
         try {
             const monitor = await apiGetAdminMonitor(this.api)
             this.render(monitor)
+            this.lastFetchFailed = false
+        } catch (e) {
+            // polled every few seconds: notify once per outage, the next poll retries
+            if (!this.lastFetchFailed) {
+                showNotification(getTranslations(getCurrentLanguage()).admin.monitorFetchFailed, "error", e)
+            }
+            this.lastFetchFailed = true
         } finally {
             this.fetching = false
         }
@@ -78,6 +87,7 @@ export class MonitorPanel implements Component {
         this.terminateAllButton.disabled = true
         try {
             const result = await apiPostAdminTerminateAll(this.api)
+            this.forceFetch()
 
             const hosts = result.hosts
                 .map(host => `${host.name}: ${host.success ? "OK" : host.error ?? "failed"}`)
@@ -86,7 +96,6 @@ export class MonitorPanel implements Component {
             await showMessage(I.terminateAllResult(result.streams_stopped, hosts))
         } finally {
             this.terminateAllButton.disabled = false
-            this.forceFetch()
         }
     }
 

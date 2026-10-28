@@ -12,7 +12,7 @@ use futures::future::{join_all, try_join_all};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
-    time::timeout,
+    time::{Instant, sleep, timeout},
 };
 use tracing::{info, warn};
 
@@ -21,6 +21,7 @@ use crate::app::{App, AppError, user::AuthenticatedUser};
 const AGENT_TIMEOUT: Duration = Duration::from_secs(2);
 const AGENT_MAX_RESPONSE: u64 = 1024 * 1024;
 const CANCEL_TIMEOUT: Duration = Duration::from_secs(10);
+const STREAMS_STOP_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[get("/admin/monitor")]
 pub async fn get_monitor(
@@ -68,6 +69,8 @@ pub async fn get_monitor(
 
 /// Stops every stream of this web server and cancels the running app on every paired host,
 /// which also ends sessions of other Moonlight clients on that host.
+/// Hosts are the ones this admin can list (own and global), same as the monitor, so the agent
+/// token is never sent to an address another user added.
 #[post("/admin/terminate_all")]
 pub async fn post_terminate_all(
     app: Data<App>,
@@ -76,6 +79,13 @@ pub async fn post_terminate_all(
     user.clone().into_admin().await?;
 
     let streams_stopped = app.streams().stop_all();
+
+    // Let the streamers die first, otherwise one that is still starting could launch the app
+    // again right after the cancel
+    let deadline = Instant::now() + STREAMS_STOP_TIMEOUT;
+    while !app.streams().is_empty() && Instant::now() < deadline {
+        sleep(Duration::from_millis(100)).await;
+    }
 
     let hosts = user.hosts().await?;
     let results = join_all(hosts.into_iter().map(|mut host| {
@@ -134,13 +144,23 @@ pub async fn post_terminate_all(
 
 /// Plain HTTP/1.0 GET against the agent, it closes the connection after the response
 async fn fetch_agent_stats(address: &str, port: u16, token: &str) -> Result<AgentStats, String> {
+    // the address ends up in the request head
+    if address.chars().any(char::is_control) {
+        return Err("invalid host address".to_string());
+    }
+    let host_header = if address.contains(':') {
+        format!("[{address}]:{port}")
+    } else {
+        format!("{address}:{port}")
+    };
+
     let request = async {
         let mut stream = TcpStream::connect((address, port))
             .await
             .map_err(|err| format!("connect failed: {err}"))?;
 
         let request = format!(
-            "GET /stats HTTP/1.0\r\nHost: {address}:{port}\r\nAuthorization: Bearer {token}\r\n\r\n"
+            "GET /stats HTTP/1.0\r\nHost: {host_header}\r\nAuthorization: Bearer {token}\r\n\r\n"
         );
         stream
             .write_all(request.as_bytes())

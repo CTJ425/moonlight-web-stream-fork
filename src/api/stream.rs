@@ -19,7 +19,12 @@ use common::{
     serialize_json,
 };
 use log::{debug, error, info, warn};
-use tokio::{process::Command, select, spawn, sync::watch, time::sleep};
+use tokio::{
+    process::Command,
+    select, spawn,
+    sync::watch,
+    time::{Instant, interval, sleep},
+};
 use tracing::{Level, instrument, span};
 
 use crate::app::{
@@ -28,6 +33,9 @@ use crate::app::{
     streams::ActiveStreamInfo,
     user::AuthenticatedUser,
 };
+
+const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
+const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[get("/host/stream")]
 #[instrument(name = "start_host", skip(web_app, user, payload), fields(user_id = %user.id()))]
@@ -277,6 +285,9 @@ pub async fn start_host(
         >(span, stdin, stdout, child.stderr.take())
         .await;
 
+        // Set when the client websocket is gone, the streamer has no one to stream to anymore
+        let (client_gone, mut client_gone_receiver) = watch::channel(false);
+
         let (stream_guard, mut stop_receiver) = web_app.streams().register(ActiveStreamInfo {
             user_name,
             host_id: host_id.0,
@@ -284,22 +295,29 @@ pub async fn start_host(
             app_name,
         });
 
+        // The ipc task owns the session, keep a handle for heartbeat pings
+        let mut ping_session = session.clone();
+
         // Redirect ipc message into ws
         spawn({
             let mut ipc_sender = ipc_sender.clone();
             async move {
-                // Unregisters the stream once this task, which owns the child, is done
-                let _stream_guard = stream_guard;
+                // Unregisters the stream, dropped once the child is gone or exiting
+                let stream_guard = stream_guard;
 
                 let mut warned_closed = false;
-                let mut stopped_by_admin = false;
+                let mut force_stop = false;
                 loop {
                     let message = select! {
                         message = ipc_receiver.recv() => message,
                         () = stop_requested(&mut stop_receiver) => {
                             info!("[Stream]: stopped by admin");
-                            stopped_by_admin = true;
-                            ipc_sender.send(ServerIpcMessage::Stop).await;
+                            force_stop = true;
+                            None
+                        }
+                        () = stop_requested(&mut client_gone_receiver) => {
+                            info!("[Stream]: client websocket closed, stopping streamer");
+                            force_stop = true;
                             None
                         }
                     };
@@ -338,8 +356,19 @@ pub async fn start_host(
                 }
                 info!("[Ipc]: ipc receiver is closed");
 
-                // Wait for the child to shutdown, an admin stop shouldn't take that long
-                sleep(Duration::from_secs(if stopped_by_admin { 2 } else { 10 })).await;
+                if force_stop {
+                    // The streamer ignores Stop before a transport exists, so it gets killed
+                    // after a short grace period. Keep it listed until then so the admin
+                    // can wait for it.
+                    ipc_sender.send(ServerIpcMessage::Stop).await;
+                    sleep(Duration::from_secs(2)).await;
+                } else {
+                    // The stream already ended, don't show it as active while waiting
+                    drop(stream_guard);
+
+                    // Wait for the child to shutdown
+                    sleep(Duration::from_secs(10)).await;
+                }
 
                 // close the websocket when the streamer crashed / disconnected / whatever
                 if let Err(err) = session.close(None).await {
@@ -373,13 +402,35 @@ pub async fn start_host(
             })
             .await;
 
-        // Redirect ws message into ipc
-        while let Some(Ok(message)) = stream.recv().await {
+        // Redirect ws message into ipc.
+        // A connection that drops without a close frame never ends the receive stream, so ping
+        // the client and treat it as gone when nothing (not even a pong) arrives for a while.
+        let mut heartbeat = interval(HEARTBEAT_INTERVAL);
+        let mut last_seen = Instant::now();
+        loop {
+            let message = select! {
+                message = stream.recv() => message,
+                _ = heartbeat.tick() => {
+                    if last_seen.elapsed() > CLIENT_TIMEOUT {
+                        info!("[Stream]: client websocket timed out");
+                        break;
+                    }
+                    if ping_session.ping(b"").await.is_err() {
+                        break;
+                    }
+                    continue;
+                }
+            };
+            let Some(Ok(message)) = message else {
+                break;
+            };
+            last_seen = Instant::now();
+
             match message {
                 Message::Text(text) => {
                     let Ok(message) = serde_json::from_str::<StreamClientMessage>(&text) else {
                         warn!("[Stream]: failed to deserialize from json");
-                        return;
+                        break;
                     };
 
                     ipc_sender.send(ServerIpcMessage::WebSocket(message)).await;
@@ -392,12 +443,14 @@ pub async fn start_host(
                 _ => {}
             }
         }
+
+        client_gone.send_replace(true);
     });
 
     Ok(response)
 }
 
-/// Completes once the admin requested a stop, never if the registry entry is gone
+/// Completes once the flag turns true, never if its sender is gone without setting it
 async fn stop_requested(receiver: &mut watch::Receiver<bool>) {
     if receiver.wait_for(|stop| *stop).await.is_err() {
         pending::<()>().await;

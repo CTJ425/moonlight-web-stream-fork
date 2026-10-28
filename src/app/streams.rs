@@ -80,15 +80,22 @@ impl StreamRegistry {
         streams
     }
 
-    /// Signals every stream to stop, returns how many were signaled
+    /// Signals every stream to stop, returns how many weren't already stopping
     pub fn stop_all(&self) -> u32 {
         let streams = self.lock();
 
+        let mut stopped = 0;
         for stream in streams.values() {
-            stream.stop.send_replace(true);
+            if !stream.stop.send_replace(true) {
+                stopped += 1;
+            }
         }
 
-        streams.len() as u32
+        stopped
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.lock().is_empty()
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<u32, RegisteredStream>> {

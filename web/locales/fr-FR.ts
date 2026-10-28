@@ -101,6 +101,7 @@ export const frFr: Translations = {
         terminateAllResult: (streams: number, hosts: string) => `Stopped ${streams} web stream(s).\n${hosts}`,
         agentDisabled: "Host agent monitoring is disabled: set host_agent.token in config.json.",
         agentUnreachable: (error: string) => `Agent unreachable: ${error}`,
+        monitorFetchFailed: "Failed to fetch monitor data",
         notPaired: "not paired",
         cpu: "CPU",
         memory: "Memory",

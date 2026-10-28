@@ -101,6 +101,7 @@ export const zhCN: Translations = {
         terminateAllResult: (streams: number, hosts: string) => `已停止 ${streams} 个网页串流。\n${hosts}`,
         agentDisabled: "主机 Agent 监控未启用：请在 config.json 设置 host_agent.token。",
         agentUnreachable: (error: string) => `无法连接 Agent：${error}`,
+        monitorFetchFailed: "获取监控数据失败",
         notPaired: "未配对",
         cpu: "CPU",
         memory: "内存",

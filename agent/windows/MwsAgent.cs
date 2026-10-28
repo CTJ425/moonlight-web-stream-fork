@@ -102,6 +102,8 @@ class Agent
     PerformanceCounter cpuCounter;
     Dictionary<string, CounterSample> lastEngineSamples = new Dictionary<string, CounterSample>();
     Dictionary<string, KeyValuePair<string, ulong>> adapters;
+    ulong adaptersTicks;
+    bool unknownLuidSeen;
 
     public void Start()
     {
@@ -144,7 +146,14 @@ class Agent
     {
         try
         {
-            File.AppendAllText(Path.Combine(Dir, "agent.log"),
+            string path = Path.Combine(Dir, "agent.log");
+            var info = new FileInfo(path);
+            if (info.Exists && info.Length > 1024 * 1024)
+            {
+                File.Copy(path, path + ".old", true);
+                File.Delete(path);
+            }
+            File.AppendAllText(path,
                 DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss ") + message + Environment.NewLine);
         }
         catch { }
@@ -183,7 +192,13 @@ class Agent
             snap.MemUsed = mem.ullTotalPhys - mem.ullAvailPhys;
         }
 
-        if (adapters == null) adapters = Dxgi.Adapters();
+        // LUIDs change when a display driver restarts, and at boot DXGI may not list the GPU yet
+        if (adapters == null || ((adapters.Count == 0 || unknownLuidSeen) && GetTickCount64() - adaptersTicks > 10000))
+        {
+            adapters = Dxgi.Adapters();
+            adaptersTicks = GetTickCount64();
+        }
+        unknownLuidSeen = false;
 
         var gpus = new Dictionary<string, GpuInfo>();
         foreach (var a in adapters)
@@ -234,6 +249,8 @@ class Agent
             string luid = LuidKey(l.Groups[1].Value, l.Groups[2].Value);
             string key = luid + "|" + e.Groups[1].Value + "|" + e.Groups[2].Value;
             double value = CounterSample.Calculate(prev, sample);
+            // a reused instance name or a counter reset gives a negative or invalid delta
+            if (double.IsNaN(value) || double.IsInfinity(value) || value <= 0.0) continue;
             double sum;
             perEngine.TryGetValue(key, out sum);
             perEngine[key] = sum + value;
@@ -244,7 +261,11 @@ class Agent
         {
             string[] parts = kv.Key.Split('|');
             GpuInfo gpu;
-            if (!gpus.TryGetValue(parts[0], out gpu)) continue;
+            if (!gpus.TryGetValue(parts[0], out gpu))
+            {
+                unknownLuidSeen = true;
+                continue;
+            }
 
             string engType = parts[2];
             if (engType.Length == 0) continue;
@@ -292,10 +313,16 @@ class Agent
 
     void OnRequest(IAsyncResult result)
     {
+        // Re-arm first: EndGetContext also throws for a single aborted connection
+        if (running)
+        {
+            try { listener.BeginGetContext(OnRequest, null); }
+            catch (Exception e) { Log("accept: " + e.Message); }
+        }
+
         HttpListenerContext ctx;
         try { ctx = listener.EndGetContext(result); }
         catch { return; }
-        try { listener.BeginGetContext(OnRequest, null); } catch { }
 
         try { Handle(ctx); }
         catch (Exception e) { Log("request: " + e.Message); }
@@ -365,6 +392,7 @@ class Agent
 
     static string Num(double v)
     {
+        if (double.IsNaN(v) || double.IsInfinity(v) || v < 0.0) v = 0.0;
         return Math.Round(v, 1).ToString(CultureInfo.InvariantCulture);
     }
 
