@@ -17,3 +17,7 @@ server
 
 /.idea
 /target-docker
+
+# Secrets and build packages for deploy/ and agent/windows/install.py
+agent.token
+*.tgz
