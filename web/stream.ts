@@ -6,11 +6,12 @@ import { InfoEvent, Stream } from "./stream/index.js"
 import { getModalBackground, Modal, showMessage, showModal } from "./component/modal/index.js";
 import { getSidebarRoot, setSidebar, setSidebarExtended, setSidebarStyle, Sidebar } from "./component/sidebar/index.js";
 import { defaultStreamInputConfig, MouseMode, ScreenKeyboardSetVisibleEvent, StreamInputConfig } from "./stream/input.js";
-import { getLocalStreamSettings, Settings } from "./component/settings_menu.js";
-import { SelectComponent } from "./component/input.js";
+import { dropLocalSettingsOnRoleChange, getLocalStreamSettings, setLocalStreamSettings, Settings } from "./component/settings_menu.js";
+import { InputComponent, SelectComponent } from "./component/input.js";
 import { DetailedRole, LogMessageType, StreamCapabilities, StreamKeys, StreamPermissions } from "./api_bindings.js";
 import { KeyboardModeEvent, KeyboardModeWillChangeEvent, ScreenKeyboard, TextEvent } from "./screen_keyboard.js";
 import { FormModal } from "./component/modal/form.js";
+import { TouchControls, TouchControlButton, TouchControlsConfig, streamKeyOptions } from "./touch_controls.js";
 import { streamStatsToText } from "./stream/stats.js";
 import { adoptRoleDefaultLanguage, getCurrentLanguage, getTranslations } from "./i18n.js";
 import { requestKeyboardLock } from "./iframe.js";
@@ -21,6 +22,7 @@ async function startApp() {
     const api = await getApi()
 
     const bootstrapRole = await apiGetRole(api, { id: null })
+    dropLocalSettingsOnRoleChange(bootstrapRole.role.default_settings)
     adoptRoleDefaultLanguage(bootstrapRole.role.default_settings)
     I = getTranslations(getCurrentLanguage())
 
@@ -82,6 +84,7 @@ class ViewerApp implements Component {
 
     private statsDiv = document.createElement("div")
     private localTouchCursorDiv = document.createElement("div")
+    private touchControls: TouchControls
     private stream: Stream
 
     private inputConfig: StreamInputConfig = defaultStreamInputConfig()
@@ -110,6 +113,19 @@ class ViewerApp implements Component {
             controllerConfig: settings.controllerConfig
         })
 
+        this.touchControls = new TouchControls(
+            (isDown, key) => this.getStream()?.getInput().sendHeldKey(isDown, key),
+            I.stream.touchControls,
+            settings.touchControls,
+            config => {
+                // Saved like the other settings, so the role defaults apply until the user changes them
+                const saved = getLocalStreamSettings(bootstrapRole.default_settings)
+                saved.touchControls = config
+                setLocalStreamSettings(saved)
+            }
+        )
+        stopPropagationOn(this.touchControls.getElement())
+
         // Configure sidebar
         this.sidebar = new ViewerSidebar(this)
         setSidebar(this.sidebar)
@@ -134,6 +150,7 @@ class ViewerApp implements Component {
         }, 100)
         this.div.appendChild(this.statsDiv)
         this.div.appendChild(this.localTouchCursorDiv)
+        this.div.appendChild(this.touchControls.getElement())
 
         // Configure stream
         this.previousMouseMode = this.inputConfig.mouseMode
@@ -787,6 +804,9 @@ class ViewerApp implements Component {
         // -> We need to correct for this when sending positions, else positions are wrong
         return this.stream.getVideoRenderer()?.getStreamRect() ?? new DOMRect()
     }
+    getTouchControls(): TouchControls {
+        return this.touchControls
+    }
     getStream(): Stream | null {
         return this.stream
     }
@@ -954,6 +974,7 @@ class ViewerSidebar implements Component, Sidebar {
     private sendKeycodeButton = document.createElement("button")
 
     private keyboardButton = document.createElement("button")
+    private touchControlsButton = document.createElement("button")
     private floatingKeyboardButton = document.createElement("button")
     private screenKeyboard = new ScreenKeyboard()
 
@@ -1003,6 +1024,18 @@ class ViewerSidebar implements Component, Sidebar {
             this.screenKeyboard.show()
         })
         this.buttonDiv.appendChild(this.keyboardButton)
+
+        // Touch controls
+        this.touchControlsButton.innerText = I.stream.touchControls
+        this.touchControlsButton.addEventListener("click", async () => {
+            const touchControls = this.app.getTouchControls()
+            const config = await showModal(new TouchControlsModal(touchControls.getConfig()))
+
+            if (config != null) {
+                touchControls.setConfig(config)
+            }
+        })
+        this.buttonDiv.appendChild(this.touchControlsButton)
 
         this.floatingKeyboardButton.innerText = "⌨×"
         this.floatingKeyboardButton.title = I.stream.hideKeyboard
@@ -1133,10 +1166,10 @@ class ViewerSidebar implements Component, Sidebar {
     }
 
     extended(): void {
-
+        this.app.getTouchControls().setSuspended(true)
     }
     unextend(): void {
-
+        this.app.getTouchControls().setSuspended(false)
     }
 
     mount(parent: HTMLElement): void {
@@ -1152,6 +1185,52 @@ class ViewerSidebar implements Component, Sidebar {
     }
 }
 
+class TouchControlsModal extends FormModal<TouchControlsConfig> {
+
+    private enabled: InputComponent
+    private rows: Array<{ label: InputComponent, key: SelectComponent }>
+
+    constructor(config: TouchControlsConfig) {
+        super()
+
+        this.enabled = new InputComponent("touchControlsEnabled", "checkbox", I.stream.touchControlsEnabled, {
+            checked: config.enabled
+        })
+
+        const keyOptions = streamKeyOptions()
+        this.rows = config.buttons.map((button: TouchControlButton, index) => ({
+            label: new InputComponent(`touchControlLabel${index}`, "text", `${I.stream.touchControlsButton} ${index + 1}`, {
+                value: button.label,
+                defaultValue: button.label
+            }),
+            key: new SelectComponent(`touchControlKey${index}`, keyOptions, {
+                preSelectedOption: button.key.toString()
+            })
+        }))
+    }
+
+    mountForm(form: HTMLFormElement): void {
+        this.enabled.mount(form)
+        for (const { label, key } of this.rows) {
+            label.mount(form)
+            key.mount(form)
+        }
+    }
+
+    reset(): void {
+    }
+
+    submit(): TouchControlsConfig | null {
+        return {
+            enabled: this.enabled.isChecked(),
+            buttons: this.rows.map(({ label, key }) => ({
+                label: label.getValue(),
+                key: parseInt(key.getValue() ?? "0")
+            }))
+        }
+    }
+}
+
 class SendKeycodeModal extends FormModal<number> {
 
     private dropdownSearch: SelectComponent
@@ -1159,25 +1238,7 @@ class SendKeycodeModal extends FormModal<number> {
     constructor() {
         super()
 
-        const keyList = []
-        for (const keyNameRaw in StreamKeys) {
-            const keyName = keyNameRaw as keyof typeof StreamKeys
-            const keyValue = StreamKeys[keyName]
-
-            const PREFIX = "VK_"
-
-            let name: string = keyName
-            if (name.startsWith(PREFIX)) {
-                name = name.slice(PREFIX.length)
-            }
-
-            keyList.push({
-                value: keyValue.toString(),
-                name
-            })
-        }
-
-        this.dropdownSearch = new SelectComponent("winKeycode", keyList, {
+        this.dropdownSearch = new SelectComponent("winKeycode", streamKeyOptions(), {
             hasSearch: true,
             displayName: I.stream.selectKeycode
         })
