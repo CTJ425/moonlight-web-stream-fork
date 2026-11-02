@@ -1375,3 +1375,124 @@ canvas.video-stream {
 .role-info-delete {
     background-color: red;
 }
+
+.touch-controls {
+    display: contents;
+}
+
+.touch-controls-toggle {
+    position: fixed;
+    top: calc(8px + env(safe-area-inset-top));
+    right: calc(8px + env(safe-area-inset-right));
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    font-size: 20px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    margin: 0;
+    background: rgba(0, 0, 0, 0.35);
+    box-shadow: none;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    z-index: 3;
+    display: none;
+}
+
+.touch-controls-stick,
+.touch-controls-buttons {
+    position: fixed;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    z-index: 3;
+    display: none;
+}
+
+.touch-controls-stick {
+    left: calc(24px + env(safe-area-inset-left));
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    background: rgba(0, 0, 0, 0.2);
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: center;
+}
+
+.touch-controls-knob {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.45);
+    pointer-events: none;
+}
+
+.touch-controls-buttons {
+    right: calc(16px + env(safe-area-inset-right));
+    width: 212px;
+    gap: 10px;
+    flex-direction: row-reverse;
+    flex-wrap: wrap-reverse;
+}
+
+.touch-controls-button {
+    width: 64px;
+    height: 64px;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+    transition: none;
+    font-size: 14px;
+    color: white;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    background: rgba(0, 0, 0, 0.3);
+    touch-action: none;
+    -webkit-touch-callout: none;
+}
+
+/** Mobile browsers keep hover after a tap */
+.touch-controls-button:hover:not(:disabled) {
+    box-shadow: none;
+    transform: none;
+    background: rgba(0, 0, 0, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
+    transition: none;
+}
+
+.touch-controls-button.touch-controls-pressed,
+.touch-controls-button.touch-controls-pressed:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+@media (pointer: coarse) {
+    .touch-controls-toggle {
+        display: block;
+    }
+}
+
+.touch-controls-active .touch-controls-stick {
+    display: flex;
+}
+
+.touch-controls-active .touch-controls-buttons {
+    display: flex;
+}
+
+@media (orientation: portrait) {
+    .touch-controls-active .touch-controls-stick,
+    .touch-controls-active .touch-controls-buttons {
+        display: none;
+    }
+}
+
+.touch-controls-suspended .touch-controls-toggle,
+.touch-controls-active.touch-controls-suspended .touch-controls-stick,
+.touch-controls-active.touch-controls-suspended .touch-controls-buttons {
+    display: none;
+}
