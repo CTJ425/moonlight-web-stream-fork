@@ -9,7 +9,7 @@ import { setContextMenu } from "./component/context_menu.js";
 import { GameList } from "./component/game/list.js";
 import { Host } from "./component/host/index.js";
 import { App, DetailedRole, DetailedUser } from "./api_bindings.js";
-import { getLocalStreamSettings, globalDefaultSettings, setLocalStreamSettings, StreamSettingsComponent } from "./component/settings_menu.js";
+import { dropLocalSettingsOnRoleChange, getLocalStreamSettings, globalDefaultSettings, setLocalStreamSettings, StreamSettingsComponent } from "./component/settings_menu.js";
 import { adoptRoleDefaultLanguage, getCurrentLanguage, getTranslations } from "./i18n.js";
 import { setTouchContextMenuEnabled } from "./polyfill/ios_right_click.js";
 import { buildUrl } from "./config_.js";
@@ -23,6 +23,7 @@ async function startApp() {
     const api = await getApi()
 
     const bootstrapRole = await apiGetRole(api, { id: null })
+    dropLocalSettingsOnRoleChange(bootstrapRole.role.default_settings)
     adoptRoleDefaultLanguage(bootstrapRole.role.default_settings)
     I = getTranslations(getCurrentLanguage())
 

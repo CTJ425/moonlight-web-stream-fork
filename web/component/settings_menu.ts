@@ -76,6 +76,15 @@ function deepMerge(target: any, source: any) {
     return target
 }
 
+// Browsers save all of their settings, which would hide every later change of the role defaults
+export function dropLocalSettingsOnRoleChange(roleDefaultSettings: Settings) {
+    const roleDefaults = JSON.stringify(roleDefaultSettings)
+    if (localStorage.getItem("mlRoleDefaults") != roleDefaults) {
+        localStorage.removeItem("mlSettings")
+        localStorage.setItem("mlRoleDefaults", roleDefaults)
+    }
+}
+
 export function getLocalStreamSettings(defaultSettings: Settings) {
     // Start with FULL global defaults
     let settings = globalDefaultSettings()

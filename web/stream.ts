@@ -6,7 +6,7 @@ import { InfoEvent, Stream } from "./stream/index.js"
 import { getModalBackground, Modal, showMessage, showModal } from "./component/modal/index.js";
 import { getSidebarRoot, setSidebar, setSidebarExtended, setSidebarStyle, Sidebar } from "./component/sidebar/index.js";
 import { defaultStreamInputConfig, MouseMode, ScreenKeyboardSetVisibleEvent, StreamInputConfig } from "./stream/input.js";
-import { getLocalStreamSettings, Settings } from "./component/settings_menu.js";
+import { dropLocalSettingsOnRoleChange, getLocalStreamSettings, Settings } from "./component/settings_menu.js";
 import { InputComponent, SelectComponent } from "./component/input.js";
 import { DetailedRole, LogMessageType, StreamCapabilities, StreamKeys, StreamPermissions } from "./api_bindings.js";
 import { KeyboardModeEvent, KeyboardModeWillChangeEvent, ScreenKeyboard, TextEvent } from "./screen_keyboard.js";
@@ -22,6 +22,7 @@ async function startApp() {
     const api = await getApi()
 
     const bootstrapRole = await apiGetRole(api, { id: null })
+    dropLocalSettingsOnRoleChange(bootstrapRole.role.default_settings)
     adoptRoleDefaultLanguage(bootstrapRole.role.default_settings)
     I = getTranslations(getCurrentLanguage())
 
