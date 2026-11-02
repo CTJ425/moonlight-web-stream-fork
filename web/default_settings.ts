@@ -1,5 +1,6 @@
 import { Settings } from "./component/settings_menu.js"
 import CONFIG from "./config.js"
+import { StreamKeys } from "./api_bindings.js"
 
 const trueDefaultSettings: Settings =
 
@@ -32,6 +33,19 @@ const trueDefaultSettings: Settings =
     // possible values: "touch", "mouseRelative", "localCursor", "pointAndDrag"
     "touchMode": "mouseRelative",
     "localCursorSensitivity": 1,
+    // On-screen stick (arrow keys) and buttons, only shown on touch devices
+    // MapleStory's default keys, side scrollers use the arrow keys instead of a controller
+    "touchControls": {
+        "enabled": true,
+        "buttons": [
+            { "label": "攻擊", "key": StreamKeys.VK_LCONTROL },
+            { "label": "跳", "key": StreamKeys.VK_LMENU },
+            { "label": "撿取", "key": StreamKeys.VK_KEY_Z },
+            { "label": "對話", "key": StreamKeys.VK_SPACE },
+            { "label": "技能1", "key": StreamKeys.VK_LSHIFT },
+            { "label": "技能2", "key": StreamKeys.VK_INSERT },
+        ]
+    },
     "controllerConfig": {
         "invertAB": false,
         "invertXY": false,

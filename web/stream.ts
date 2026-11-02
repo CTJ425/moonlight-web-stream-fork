@@ -6,12 +6,12 @@ import { InfoEvent, Stream } from "./stream/index.js"
 import { getModalBackground, Modal, showMessage, showModal } from "./component/modal/index.js";
 import { getSidebarRoot, setSidebar, setSidebarExtended, setSidebarStyle, Sidebar } from "./component/sidebar/index.js";
 import { defaultStreamInputConfig, MouseMode, ScreenKeyboardSetVisibleEvent, StreamInputConfig } from "./stream/input.js";
-import { dropLocalSettingsOnRoleChange, getLocalStreamSettings, Settings } from "./component/settings_menu.js";
+import { dropLocalSettingsOnRoleChange, getLocalStreamSettings, setLocalStreamSettings, Settings } from "./component/settings_menu.js";
 import { InputComponent, SelectComponent } from "./component/input.js";
 import { DetailedRole, LogMessageType, StreamCapabilities, StreamKeys, StreamPermissions } from "./api_bindings.js";
 import { KeyboardModeEvent, KeyboardModeWillChangeEvent, ScreenKeyboard, TextEvent } from "./screen_keyboard.js";
 import { FormModal } from "./component/modal/form.js";
-import { TouchControls, TouchControlButton, TouchControlsConfig } from "./touch_controls.js";
+import { TouchControls, TouchControlButton, TouchControlsConfig, streamKeyOptions } from "./touch_controls.js";
 import { streamStatsToText } from "./stream/stats.js";
 import { adoptRoleDefaultLanguage, getCurrentLanguage, getTranslations } from "./i18n.js";
 import { requestKeyboardLock } from "./iframe.js";
@@ -115,7 +115,14 @@ class ViewerApp implements Component {
 
         this.touchControls = new TouchControls(
             (isDown, key) => this.getStream()?.getInput().sendHeldKey(isDown, key),
-            I.stream.touchControls
+            I.stream.touchControls,
+            settings.touchControls,
+            config => {
+                // Saved like the other settings, so the role defaults apply until the user changes them
+                const saved = getLocalStreamSettings(bootstrapRole.default_settings)
+                saved.touchControls = config
+                setLocalStreamSettings(saved)
+            }
         )
         stopPropagationOn(this.touchControls.getElement())
 
@@ -1176,27 +1183,6 @@ class ViewerSidebar implements Component, Sidebar {
             this.floatingKeyboardButton.parentElement.removeChild(this.floatingKeyboardButton)
         }
     }
-}
-
-function streamKeyOptions(): Array<{ value: string, name: string }> {
-    const keyList = []
-    for (const keyNameRaw in StreamKeys) {
-        const keyName = keyNameRaw as keyof typeof StreamKeys
-        const keyValue = StreamKeys[keyName]
-
-        const PREFIX = "VK_"
-
-        let name: string = keyName
-        if (name.startsWith(PREFIX)) {
-            name = name.slice(PREFIX.length)
-        }
-
-        keyList.push({
-            value: keyValue.toString(),
-            name
-        })
-    }
-    return keyList
 }
 
 class TouchControlsModal extends FormModal<TouchControlsConfig> {

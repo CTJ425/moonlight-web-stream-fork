@@ -10,18 +10,6 @@ export type TouchControlsConfig = {
     buttons: Array<TouchControlButton>
 }
 
-const STORAGE_KEY = "mlTouchControls"
-
-// MapleStory's default keys, side scrollers use the arrow keys instead of a controller
-const DEFAULT_BUTTONS: Array<TouchControlButton> = [
-    { label: "攻擊", key: StreamKeys.VK_LCONTROL },
-    { label: "跳", key: StreamKeys.VK_LMENU },
-    { label: "撿取", key: StreamKeys.VK_KEY_Z },
-    { label: "對話", key: StreamKeys.VK_SPACE },
-    { label: "技能1", key: StreamKeys.VK_LSHIFT },
-    { label: "技能2", key: StreamKeys.VK_INSERT },
-]
-
 // Relative to the stick radius
 const STICK_DEAD_ZONE = 0.3
 // A horizontal drag must not crouch or climb by accident, so vertical needs a steeper angle: sin(22.5) and sin(35) degrees
@@ -48,23 +36,25 @@ export function stickKeys(x: number, y: number, radius: number): Array<number> {
     return keys
 }
 
-function defaultConfig(): TouchControlsConfig {
-    return {
-        enabled: window.matchMedia("(pointer: coarse)").matches,
-        buttons: DEFAULT_BUTTONS.map(button => ({ ...button }))
-    }
-}
+export function streamKeyOptions(): Array<{ value: string, name: string }> {
+    const keyList = []
+    for (const keyNameRaw in StreamKeys) {
+        const keyName = keyNameRaw as keyof typeof StreamKeys
+        const keyValue = StreamKeys[keyName]
 
-function loadConfig(): TouchControlsConfig {
-    try {
-        const json = localStorage.getItem(STORAGE_KEY)
-        if (json) {
-            return { ...defaultConfig(), ...JSON.parse(json) }
+        const PREFIX = "VK_"
+
+        let name: string = keyName
+        if (name.startsWith(PREFIX)) {
+            name = name.slice(PREFIX.length)
         }
-    } catch (e) {
-        localStorage.removeItem(STORAGE_KEY)
+
+        keyList.push({
+            value: keyValue.toString(),
+            name
+        })
     }
-    return defaultConfig()
+    return keyList
 }
 
 export class TouchControls {
@@ -75,15 +65,18 @@ export class TouchControls {
     private buttonsDiv = document.createElement("div")
 
     private sendKey: (isDown: boolean, key: number) => void
-    private config = loadConfig()
+    private onConfigChange: (config: TouchControlsConfig) => void
+    private config: TouchControlsConfig
     private suspended: boolean = false
 
     private stickPointer: number | null = null
     private pressedStickKeys: Array<number> = []
     private pressedButtons: Map<number, { key: number, element: HTMLButtonElement }> = new Map()
 
-    constructor(sendKey: (isDown: boolean, key: number) => void, toggleLabel: string) {
+    constructor(sendKey: (isDown: boolean, key: number) => void, toggleLabel: string, config: TouchControlsConfig, onConfigChange: (config: TouchControlsConfig) => void) {
         this.sendKey = sendKey
+        this.config = config
+        this.onConfigChange = onConfigChange
 
         this.div.classList.add("touch-controls")
         // The long press menu of mobile browsers would interrupt a held button
@@ -126,11 +119,7 @@ export class TouchControls {
     setConfig(config: TouchControlsConfig) {
         this.releaseAll()
         this.config = config
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(config))
-        } catch (e) {
-            console.warn("Failed to save touch controls", e)
-        }
+        this.onConfigChange(config)
         this.rebuildButtons()
         this.updateVisibility()
     }
@@ -144,7 +133,8 @@ export class TouchControls {
 
     private updateVisibility() {
         this.div.classList.toggle("touch-controls-suspended", this.suspended)
-        this.div.classList.toggle("touch-controls-active", this.config.enabled)
+        // Enabled means shown on touch devices, a mouse never needs the controls
+        this.div.classList.toggle("touch-controls-active", this.config.enabled && window.matchMedia("(pointer: coarse)").matches)
     }
 
     private rebuildButtons() {
