@@ -1,53 +1,80 @@
 #!/usr/bin/env bash
-# Deploy moonlight-web-stream admin-panel build (378ee0f) to LXC 104 (mws) on pve02.
-# Backs up the current binaries/static/config first. Rollback: see the end of this file.
+# Deploys this build (v3) to production in LXC 104 (mws) on pve02, replacing v2.10.0 in place:
+# same moonlight-web.service, same /opt/moonlight-web, same server/ data.
+# Backs up binaries, static and server/ first. Rollback: see the end of this file.
+#   PKG=mws-<rev>.tgz deploy/deploy-prod.sh
+#   WAIT_IDLE=1 deploy/deploy-prod.sh     wait (up to 2 h) until no v2 streamer is running
 set -euo pipefail
 
-# PKG: tgz with web-server, streamer, static/ (see docs/ADMIN-MONITOR.md); the agent token stays outside the repo
-BUILD_DIR="${BUILD_DIR:-/home/ivan/src/mws-build}"
-PKG="${PKG:-$BUILD_DIR/mws-admin-378ee0f.tgz}"
-TOKEN="$(cat "${AGENT_TOKEN_FILE:-$BUILD_DIR/agent.token}")"
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+PVE=root@10.8.22.33
+CT=104
+PKG="${PKG:-$(ls -t "$REPO"/mws-*.tgz | head -1)}"
+STAMP="$(date +%Y%m%d-%H%M)"
+echo "package: $PKG, backup suffix: $STAMP"
 
-scp -q "$PKG" root@10.8.22.33:/root/mws-admin.tgz
-ssh root@10.8.22.33 "pct push 104 /root/mws-admin.tgz /root/mws-admin.tgz && rm -f /root/mws-admin.tgz"
+scp -q "$PKG" "$PVE:/root/mws-prod.tgz"
+ssh "$PVE" "pct push $CT /root/mws-prod.tgz /root/mws-prod.tgz && rm -f /root/mws-prod.tgz"
 
-ssh root@10.8.22.33 "pct exec 104 -- env TOKEN='$TOKEN' bash -s" <<'EOF'
+ssh "$PVE" "pct exec $CT -- env STAMP='$STAMP' WAIT_IDLE='${WAIT_IDLE:-0}' bash -s" <<'EOF'
 set -euo pipefail
-if pgrep -x streamer >/dev/null; then echo "a web stream is running, aborting"; exit 1; fi
+D=/opt/moonlight-web
+B=/opt/moonlight-web.bak-$STAMP
 
-B=/opt/moonlight-web.bak-20261028
+if [ "$WAIT_IDLE" = 1 ]; then
+    for _ in $(seq 1 240); do
+        pgrep -x streamer >/dev/null || break
+        sleep 30
+    done
+    if pgrep -x streamer >/dev/null; then echo "still streaming after 2 h, aborting"; exit 1; fi
+fi
+
 mkdir -p "$B"
-cp -a /opt/moonlight-web/web-server /opt/moonlight-web/streamer /opt/moonlight-web/static "$B/"
-cp -a /opt/moonlight-web/server/config.json /opt/moonlight-web/server/config.json.bak-20261028
+cp -a "$D/web-server" "$D/static" "$D/server" "$B/"
+[ -e "$D/streamer" ] && cp -a "$D/streamer" "$B/"
+echo "backup: $B"
+
+rm -rf /root/mws-new && mkdir -p /root/mws-new && tar -C /root/mws-new -xzf /root/mws-prod.tgz
 
 systemctl stop moonlight-web
-rm -rf /root/mws-new && mkdir -p /root/mws-new && tar -C /root/mws-new -xzf /root/mws-admin.tgz
-rm -rf /opt/moonlight-web/static
-cp -r /root/mws-new/static /opt/moonlight-web/static
-install -m 755 /root/mws-new/web-server /root/mws-new/streamer /opt/moonlight-web/
+pkill -x streamer 2>/dev/null || true
 
+install -m 755 /root/mws-new/web-server "$D/web-server"
+rm -rf "$D/static" && cp -r /root/mws-new/static "$D/static"
+# v3 runs streams in-process
+rm -f "$D/streamer"
+
+# Drop the config keys v3 removed
 python3 - <<'PY'
-import json, os
-p = '/opt/moonlight-web/server/config.json'
+import json
+p = "/opt/moonlight-web/server/config.json"
 c = json.load(open(p))
-c['host_agent'] = {'port': 47995, 'token': os.environ['TOKEN']}
-json.dump(c, open(p, 'w'), indent=2)
+c.pop("streamer_path", None)
+c.pop("default_settings", None)
+c.get("webrtc", {}).pop("network_types", None)
+for key in ("default_role_id", "default_user_id"):
+    if c.get("web_server", {}).get(key) is not None:
+        print(f"note: web_server.{key} was set, v3 keeps it in data.json: set it again in the admin panel")
+    c.get("web_server", {}).pop(key, None)
+json.dump(c, open(p, "w"), indent=2)
 PY
-chown mlw:mlw /opt/moonlight-web/server/config.json
+chown mlw:mlw "$D/server/config.json" && chmod 600 "$D/server/config.json"
 
-sed -i 's/(v2.10.0)/(v2.10.0 + admin monitor)/' /etc/systemd/system/moonlight-web.service
+sed -i 's/^Description=.*/Description=moonlight-web-stream (v3.0.1 fork)/' /etc/systemd/system/moonlight-web.service
 systemctl daemon-reload
 systemctl start moonlight-web
-sleep 3
+sleep 4
 systemctl is-active moonlight-web
-curl -sk -o /dev/null -w "monitor.js %{http_code} (expect 200)\n" https://127.0.0.1:8080/component/monitor/index.js
-curl -sk -o /dev/null -w "monitor api without login %{http_code} (expect 401)\n" https://127.0.0.1:8080/api/admin/monitor
-rm -rf /root/mws-new /root/mws-admin.tgz
+journalctl -u moonlight-web --no-pager -n 8 -o cat | cut -c1-200
+curl -sk -o /dev/null -w "index %{http_code} (expect 200)\n" https://127.0.0.1:8080/
+curl -sk -o /dev/null -w "monitor without login %{http_code} (expect 401)\n" https://127.0.0.1:8080/api/admin/monitor
+rm -rf /root/mws-new /root/mws-prod.tgz
+echo "rollback backup: $B"
 EOF
 
-# Rollback (inside LXC 104):
+# Rollback (inside LXC 104), B = the backup printed above:
 #   systemctl stop moonlight-web
-#   cp -a /opt/moonlight-web.bak-20261028/{web-server,streamer} /opt/moonlight-web/
-#   rm -rf /opt/moonlight-web/static && cp -a /opt/moonlight-web.bak-20261028/static /opt/moonlight-web/
-#   cp -a /opt/moonlight-web/server/config.json.bak-20261028 /opt/moonlight-web/server/config.json
+#   cp -a $B/web-server $B/streamer /opt/moonlight-web/
+#   rm -rf /opt/moonlight-web/static && cp -a $B/static /opt/moonlight-web/
+#   rm -rf /opt/moonlight-web/server && cp -a $B/server /opt/moonlight-web/
 #   systemctl start moonlight-web
