@@ -18,9 +18,8 @@ sudo docker run --rm \
     -e CARGO_TARGET_DIR=/src/target-docker \
     -e CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-1}" \
     -e CARGO_PROFILE_DEV_DEBUG=0 \
+    -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*' \
     -w /src mws-build-v3 bash -euc '
-        # the checkout is owned by the host user, git refuses it otherwise
-        git config --global --add safe.directory "*"
         cargo build --release --locked
         npm ci --no-audit --no-fund
         CARGO_TARGET_DIR=/src/target-docker npm run build
