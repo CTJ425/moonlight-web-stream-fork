@@ -6,6 +6,7 @@ use actix_web::{
 };
 
 use crate::api::{
+    admin::{get_monitor, post_terminate_all},
     app::{get_app_image, get_apps},
     auth::auth_middleware,
     host::{
@@ -31,6 +32,7 @@ use crate::api::{
 pub mod bindings;
 pub(super) mod bindings_ext;
 
+pub mod admin;
 pub mod app;
 pub mod auth;
 pub mod host;
@@ -92,6 +94,11 @@ pub fn api_service() -> impl HttpServiceFactory {
             // -- Settings
             get_default_settings,
             get_permissions
+        ])
+        .service(services![
+            // -- Admin
+            get_monitor,
+            post_terminate_all,
         ])
         .service(services![
             // -- Web Socket Stream

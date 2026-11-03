@@ -150,6 +150,15 @@ impl Host {
         })
     }
 
+    /// The address the host was added with, without the port
+    pub async fn address(&self, user: &mut AuthenticatedUser) -> Result<String, AppError> {
+        self.can_use(user).await?;
+
+        let app = self.app.access()?;
+
+        Ok(self.storage_host(&app).await?.address)
+    }
+
     async fn use_request_client<R>(
         &mut self,
         app: &AppInner,

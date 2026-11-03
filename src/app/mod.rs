@@ -236,6 +236,16 @@ impl App {
 
         Ok(stream.clone())
     }
+    /// Streams that are still running, a closed stream stays in the map for a while
+    pub async fn alive_streams(&self) -> Vec<Stream> {
+        let streams = self.inner.streams.read().await;
+
+        streams
+            .values()
+            .filter(|stream| stream.is_alive().unwrap_or(false))
+            .cloned()
+            .collect()
+    }
 
     // -- Users
 

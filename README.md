@@ -1,5 +1,8 @@
 
 # Moonlight Web
+
+> Fork: adds an admin monitor tab (host CPU/memory/GPU, terminate all sessions) with a Windows stats agent, on-screen touch controls, and role default settings that replace saved browser settings. See [docs/ADMIN-MONITOR.md](docs/ADMIN-MONITOR.md).
+
 An unofficial [Moonlight Client](https://moonlight-stream.org/) allowing you to stream your pc to the Web.
 It hosts a Web Server which will forward [Sunshine](https://docs.lizardbyte.dev/projects/sunshine/latest/) traffic to a Browser using the [WebRTC Api](https://webrtc.org/).
 

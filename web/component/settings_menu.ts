@@ -6,6 +6,7 @@ import { Component, ComponentEvent } from "./index"
 import { InputComponent, SelectComponent } from "./input"
 import { SidebarEdge } from "./sidebar/index"
 import { StreamPermissions } from "../api_bindings";
+import { streamKeyOptions, TouchControlsConfig } from "../touch_controls"
 
 export type Settings = {
     sidebarEdge: SidebarEdge,
@@ -27,6 +28,7 @@ export type Settings = {
     mouseMode: MouseMode
     touchMode: TouchMode
     localCursorSensitivity: number
+    touchControls: TouchControlsConfig
     controllerConfig: ControllerConfig
     dataTransport: TransportType
     language: Language
@@ -74,6 +76,15 @@ function deepMerge(target: any, source: any) {
         }
     }
     return target
+}
+
+// Browsers save all of their settings, which would hide every later change of the role defaults
+export function dropLocalSettingsOnRoleChange(roleDefaultSettings: Settings) {
+    const roleDefaults = JSON.stringify(roleDefaultSettings)
+    if (localStorage.getItem("mlRoleDefaults") != roleDefaults) {
+        localStorage.removeItem("mlSettings")
+        localStorage.setItem("mlRoleDefaults", roleDefaults)
+    }
 }
 
 export function getLocalStreamSettings(defaultSettings: Settings) {
@@ -137,6 +148,10 @@ function makeSettingsValid(permissions: StreamPermissions, settings: Settings) {
     if (!Number.isFinite(settings.localCursorSensitivity) || settings.localCursorSensitivity <= 0) {
         settings.localCursorSensitivity = globalDefaultSettings().localCursorSensitivity
     }
+
+    if (!Array.isArray(settings.touchControls?.buttons)) {
+        settings.touchControls = globalDefaultSettings().touchControls
+    }
 }
 
 export class StreamSettingsComponent implements Component {
@@ -173,6 +188,10 @@ export class StreamSettingsComponent implements Component {
     private mouseMode: SelectComponent
     private touchMode: SelectComponent
     private localCursorSensitivity: InputComponent
+
+    private touchControlsHeader: HTMLHeadingElement = document.createElement("h3")
+    private touchControlsEnabled: InputComponent
+    private touchControlsButtons: Array<{ label: InputComponent, key: SelectComponent }>
 
     private controllerHeader: HTMLHeadingElement = document.createElement("h3")
     private controllerInvertAB: InputComponent
@@ -426,6 +445,34 @@ export class StreamSettingsComponent implements Component {
         this.localCursorSensitivity.addChangeListener(this.onSettingsChange.bind(this))
         this.localCursorSensitivity.mount(this.divElement)
 
+        // Touch Controls
+        this.touchControlsHeader.innerText = streamI.touchControls
+        this.divElement.appendChild(this.touchControlsHeader)
+
+        this.touchControlsEnabled = new InputComponent("touchControlsEnabled", "checkbox", streamI.touchControlsEnabled, {
+            checked: settings.touchControls.enabled
+        })
+        this.touchControlsEnabled.addChangeListener(this.onSettingsChange.bind(this))
+        this.touchControlsEnabled.mount(this.divElement)
+
+        const keyOptions = streamKeyOptions()
+        this.touchControlsButtons = settings.touchControls.buttons.map((button, index) => {
+            const label = new InputComponent(`touchControlLabel${index}`, "text", `${streamI.touchControlsButton} ${index + 1}`, {
+                value: button.label,
+                defaultValue: button.label
+            })
+            label.addChangeListener(this.onSettingsChange.bind(this))
+            label.mount(this.divElement)
+
+            const key = new SelectComponent(`touchControlKey${index}`, keyOptions, {
+                preSelectedOption: button.key.toString()
+            })
+            key.addChangeListener(this.onSettingsChange.bind(this))
+            key.mount(this.divElement)
+
+            return { label, key }
+        })
+
         // Controller
         if (window.isSecureContext) {
             this.controllerHeader.innerText = i.controller
@@ -576,6 +623,14 @@ export class StreamSettingsComponent implements Component {
         settings.mouseMode = this.mouseMode.getValue() as MouseMode
         settings.touchMode = this.touchMode.getValue() as TouchMode
         settings.localCursorSensitivity = parseFloat(this.localCursorSensitivity.getValue())
+
+        settings.touchControls = {
+            enabled: this.touchControlsEnabled.isChecked(),
+            buttons: this.touchControlsButtons.map(({ label, key }) => ({
+                label: label.getValue(),
+                key: parseInt(key.getValue() ?? "0")
+            }))
+        }
 
         settings.controllerConfig.invertAB = this.controllerInvertAB.isChecked()
         settings.controllerConfig.invertXY = this.controllerInvertXY.isChecked()

@@ -1,4 +1,4 @@
-import { App, DeleteHostQuery, DeleteUserRequest, DetailedHost, DetailedUser, GetAppImageQuery, GetAppsQuery, GetAppsResponse, GetHostQuery, GetHostResponse, GetHostsResponse, GetUserQuery, GetUsersResponse, PatchUserRequest, PostCancelRequest, PostCancelResponse, PostLoginRequest, PostPairRequest, PostPairResponse1, PostPairResponse2, PostUserRequest, PostWakeUpRequest, PostHostRequest, PostHostResponse, UndetailedHost, PatchHostRequest, GetRolesResponse, GetRoleResponse, GetRoleQuery, DeleteRoleQuery, PatchRoleRequest, PostRoleResponse, PostRoleRequest, DetailedRole, PutDefaultUserRequest, PutDefaultRoleRequest, GetDefaultRoleResponse, GetDefaultUserResponse, } from "./api_bindings"
+import { App, DeleteHostQuery, DeleteUserRequest, DetailedHost, DetailedUser, GetAppImageQuery, GetAppsQuery, GetAppsResponse, GetHostQuery, GetHostResponse, GetHostsResponse, GetUserQuery, GetUsersResponse, PatchUserRequest, PostCancelRequest, PostCancelResponse, PostLoginRequest, PostPairRequest, PostPairResponse1, PostPairResponse2, PostUserRequest, PostWakeUpRequest, PostHostRequest, PostHostResponse, UndetailedHost, PatchHostRequest, GetRolesResponse, GetRoleResponse, GetRoleQuery, DeleteRoleQuery, PatchRoleRequest, PostRoleResponse, PostRoleRequest, DetailedRole, PutDefaultUserRequest, PutDefaultRoleRequest, GetDefaultRoleResponse, GetDefaultUserResponse, GetAdminMonitorResponse, PostAdminTerminateAllResponse } from "./api_bindings"
 import { showNotification } from "./component/notification"
 import { showMessage, showModal } from "./component/modal/index"
 import { ApiUserPasswordPrompt } from "./component/modal/login"
@@ -203,23 +203,22 @@ class StreamedJsonResponse<Initial, Other> {
 
     async next(): Promise<Other | null> {
         while (true) {
+            // One read can contain several lines or only part of one
+            const lineEnd = this.bufferedText.indexOf("\n")
+            if (lineEnd != -1) {
+                const text = this.bufferedText.slice(0, lineEnd)
+                this.bufferedText = this.bufferedText.slice(lineEnd + 1)
+
+                return JSON.parse(text)
+            }
+
             const { done, value } = await this.reader.read()
 
             if (done) {
                 return null
             }
 
-            this.bufferedText += this.decoder.decode(value)
-
-            const split = this.bufferedText.split("\n", 2)
-            if (split.length == 2) {
-                this.bufferedText = split[1]
-
-                const text = split[0]
-                const json = JSON.parse(text)
-
-                return json
-            }
+            this.bufferedText += this.decoder.decode(value, { stream: true })
         }
     }
 }
@@ -565,4 +564,19 @@ export async function apiWebRTCOffer(api: Api, offerSdp: string): Promise<WebRTC
         answerSdp,
         location,
     }
+}
+
+export async function apiGetAdminMonitor(api: Api): Promise<GetAdminMonitorResponse> {
+    const response = await fetchApi(api, "/admin/monitor", GET, {
+        response: "json"
+    })
+
+    return response as GetAdminMonitorResponse
+}
+export async function apiPostAdminTerminateAll(api: Api): Promise<PostAdminTerminateAllResponse> {
+    const response = await fetchApi(api, "/admin/terminate_all", POST, {
+        response: "json"
+    }, 30000)
+
+    return response as PostAdminTerminateAllResponse
 }

@@ -62,7 +62,7 @@ use crate::api::stream::webrtc::ice_servers::generate_ice_servers;
 use crate::api::stream::{PACKET_SIZE, apply_role_restrictions};
 use crate::app::App;
 use crate::app::host::HostId;
-use crate::app::stream::{ExternalStreamEvent, Stream, StreamId};
+use crate::app::stream::{ExternalStreamEvent, Stream, StreamId, StreamInfo, admin_names};
 use crate::app::{AppError, user::AuthenticatedUser};
 
 const FLEX_FEC_PAYLOAD_TYPE: u8 = 49;
@@ -293,6 +293,7 @@ pub async fn webrtc_post(
 
     // Get host
     let mut host = user.host(host_id).await?;
+    let (user_name, host_name) = admin_names(&mut user, &host).await;
     let host = host.use_host(&mut user).await?;
 
     if !host.is_paired().await? {
@@ -639,6 +640,7 @@ pub async fn webrtc_post(
     // Append additional data to the response
     let mut answer_sdp =
         Session::parse(answer.sdp.as_bytes()).expect("failed to get parse sdp answer");
+    let app_name = app_title.clone().unwrap_or_default();
     let additional_answer = WebRTCSessionAnswer {
         app_name: app_title,
         microphone: host_features.microphone,
@@ -655,7 +657,13 @@ pub async fn webrtc_post(
 
     // Add stream to the list of streams
     let (event_sender, mut event_receiver) = mpsc::channel(20);
-    let stream = match Stream::new(&app, &user, event_sender).await {
+    let stream_info = StreamInfo::new(
+        user_name,
+        host_id.0,
+        host_name,
+        app_name,
+    );
+    let stream = match Stream::new(&app, &user, event_sender, stream_info).await {
         Ok(value) => value,
         Err(err) => {
             // TODO: cleanup the stream
@@ -720,6 +728,10 @@ pub async fn webrtc_post(
                         if let Err(err) = peer.close().await {
                             warn!(error = %err, "error whilst closing the webrtc peer");
                         }
+
+                        // Drop the receiver now so the stream counts as closed right away
+                        // instead of after the next state check, the admin waits for that
+                        return;
                     }
                 }
             }

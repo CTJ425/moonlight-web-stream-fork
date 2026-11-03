@@ -16,6 +16,7 @@ import { RoleList } from "./component/roles/list"
 import { DetailedRolePage } from "./component/roles/detailed_page"
 import { AddRoleModal } from "./component/roles/add_modal"
 import { adoptRoleDefaultLanguage, getCurrentLanguage, getTranslations } from "./i18n"
+import { MonitorPanel } from "./component/monitor/index"
 
 let I = getTranslations(getCurrentLanguage())
 
@@ -75,7 +76,8 @@ async function checkPermissions(api: Api) {
 }
 
 type AppState = { tab: "users", user_id: number | null } |
-{ tab: "roles", role_id: number | null }
+{ tab: "roles", role_id: number | null } |
+{ tab: "monitor" }
 function pushAppState(state: AppState, pushHistory: boolean) {
     if (pushHistory) {
         history.pushState(state, "")
@@ -112,6 +114,7 @@ class AdminApp implements Component {
     private tabs = document.createElement("div")
     private userTabButton = document.createElement("button")
     private rolesTabButton = document.createElement("button")
+    private monitorTabButton = document.createElement("button")
 
     // Content
     private content = document.createElement("div")
@@ -119,6 +122,7 @@ class AdminApp implements Component {
     // The actual content of the tabs
     private users: UserPanel | null = null
     private roles: RolePanel | null = null
+    private monitor: MonitorPanel | null = null
 
     constructor(api: Api) {
         this.api = api
@@ -168,6 +172,13 @@ class AdminApp implements Component {
         })
         this.tabs.appendChild(this.rolesTabButton)
 
+        // Monitor tab
+        this.monitorTabButton.innerText = I.admin.monitor
+        this.monitorTabButton.addEventListener("click", () => {
+            this.setAppState({ tab: "monitor" })
+        })
+        this.tabs.appendChild(this.monitorTabButton)
+
         // Content div
         this.content.classList.add("admin-panel-content")
         this.root.appendChild(this.content)
@@ -178,6 +189,8 @@ class AdminApp implements Component {
             await this.users?.forceFetch()
         } else if (this.currentState?.tab == "roles") {
             await this.roles?.forceFetch()
+        } else if (this.currentState?.tab == "monitor") {
+            await this.monitor?.forceFetch()
         }
     }
 
@@ -189,6 +202,8 @@ class AdminApp implements Component {
                 this.users?.unmount(this.content)
             } else if (this.currentState?.tab == "roles") {
                 this.roles?.unmount(this.content)
+            } else if (this.currentState?.tab == "monitor") {
+                this.monitor?.unmount(this.content)
             }
 
             // Mount and create (if necessary) new tab
@@ -210,6 +225,12 @@ class AdminApp implements Component {
                 }
 
                 this.roles.mount(this.content)
+            } else if (state.tab == "monitor") {
+                if (!this.monitor) {
+                    this.monitor = new MonitorPanel(this.api)
+                }
+
+                this.monitor.mount(this.content)
             }
         }
 

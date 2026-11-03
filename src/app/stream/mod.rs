@@ -1,11 +1,16 @@
-use std::{ops::Deref, sync::Arc, time::Duration};
+use std::{
+    ops::Deref,
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use tokio::{spawn, sync::mpsc::Sender, time::sleep};
 use tracing::{debug, warn};
 
 use crate::app::{
     App, AppError,
-    user::{AuthenticatedUser, RoleType, User},
+    host::Host,
+    user::{Admin, AuthenticatedUser, RoleType, User},
 };
 
 pub enum ExternalStreamEvent {
@@ -15,6 +20,45 @@ pub enum ExternalStreamEvent {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StreamId(pub u32);
+
+/// Shown in the admin monitor
+#[derive(Debug, Clone)]
+pub struct StreamInfo {
+    pub user_name: String,
+    pub host_id: u32,
+    pub host_name: String,
+    pub app_name: String,
+    pub started_unix_secs: u64,
+}
+
+/// Names for the admin stream list, a lookup failure must not prevent the stream
+pub async fn admin_names(user: &mut AuthenticatedUser, host: &Host) -> (String, String) {
+    let user_name = match user.detailed_user().await {
+        Ok(detailed) => detailed.name,
+        Err(_) => user.id().to_string(),
+    };
+    let host_name = match host.undetailed_host_cached(user).await {
+        Ok(undetailed) => undetailed.name,
+        Err(_) => host.id().0.to_string(),
+    };
+
+    (user_name, host_name)
+}
+
+impl StreamInfo {
+    pub fn new(user_name: String, host_id: u32, host_name: String, app_name: String) -> Self {
+        Self {
+            user_name,
+            host_id,
+            host_name,
+            app_name,
+            started_unix_secs: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|duration| duration.as_secs())
+                .unwrap_or(0),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct Stream {
@@ -26,6 +70,7 @@ impl Stream {
         app: &App,
         owner: &AuthenticatedUser,
         event_sender: Sender<ExternalStreamEvent>,
+        info: StreamInfo,
     ) -> Result<Self, AppError> {
         app.insert_stream(|id| {
             let app_ref = app.new_ref();
@@ -65,6 +110,7 @@ impl Stream {
                     id,
                     owner: owner.deref().clone(),
                     event_sender,
+                    info,
                 }),
             }
         })
@@ -105,9 +151,21 @@ impl Stream {
         Ok(())
     }
 
-    #[allow(unused)]
     pub fn is_alive(&self) -> Result<bool, AppError> {
         Ok(!self.inner.event_sender.is_closed())
+    }
+
+    pub fn info(&self) -> &StreamInfo {
+        &self.inner.info
+    }
+
+    /// Stop without a permission check, only for the admin
+    pub async fn stop_as_admin(&self, _admin: &Admin) -> Result<(), AppError> {
+        self.inner
+            .event_sender
+            .send(ExternalStreamEvent::Stop)
+            .await
+            .map_err(|_| AppError::StreamClosed)
     }
 }
 
@@ -115,4 +173,5 @@ pub(crate) struct StreamInner {
     pub(crate) id: StreamId,
     pub(crate) owner: User,
     pub(crate) event_sender: Sender<ExternalStreamEvent>,
+    pub(crate) info: StreamInfo,
 }

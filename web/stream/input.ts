@@ -184,6 +184,16 @@ export class StreamInput {
         this.pressedKeys.clear()
     }
 
+    // Tracked like a real key, so it's raised when the page loses focus
+    sendHeldKey(isDown: boolean, key: number) {
+        if (isDown) {
+            this.pressedKeys.add(key)
+        } else {
+            this.pressedKeys.delete(key)
+        }
+        this.sendKey(isDown, key, emptyKeyModifiers())
+    }
+
     // Note: key = StreamKeys.VK_, modifiers = StreamKeyModifiers.
     sendKey(isDown: boolean, key: number, modifiers: KeyModifiers) {
         this.controlStream?.send(new ClientInputEvent.Keyboard({

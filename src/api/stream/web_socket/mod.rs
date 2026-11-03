@@ -10,7 +10,11 @@ use crate::api::{
         web_socket::delay_controller::{DelayController, DelayState},
     },
 };
-use actix_web::{Error, HttpRequest, HttpResponse, get, rt::spawn, web::Payload};
+use actix_web::{
+    Error, HttpRequest, HttpResponse, get,
+    rt::spawn,
+    web::{Data, Payload},
+};
 use actix_ws::{Message, MessageStream, Session};
 use bytes::Bytes;
 use moonlight_common::{
@@ -35,14 +39,19 @@ use moonlight_common::{
 };
 use tokio::{
     select,
-    sync::mpsc::{UnboundedSender, unbounded_channel},
+    sync::mpsc::{self, UnboundedSender, unbounded_channel},
     time::{Instant, interval, sleep},
 };
 use tracing::{Instrument, debug, debug_span, error, info, instrument, trace, warn};
 
 use crate::{
     api::stream::create_control_packet_config,
-    app::{AppError, host::HostId, user::AuthenticatedUser},
+    app::{
+        App, AppError,
+        host::HostId,
+        stream::{ExternalStreamEvent, Stream, StreamInfo, admin_names},
+        user::AuthenticatedUser,
+    },
 };
 
 /// Queue delay below which the client has caught up and video is sent again.
@@ -66,8 +75,9 @@ enum WsData {
 }
 
 #[get("/host/stream/web_socket")]
-#[instrument(skip(user, req, body_stream), fields(user = %user.id()))]
+#[instrument(skip(app, user, req, body_stream), fields(user = %user.id()))]
 pub async fn web_socket_stream(
+    app: Data<App>,
     mut user: AuthenticatedUser,
     req: HttpRequest,
     body_stream: Payload,
@@ -87,7 +97,7 @@ pub async fn web_socket_stream(
 
     spawn(
         async move {
-            match handle_ws(user, ws_sender, ws_receiver).await {
+            match handle_ws(app, user, ws_sender, ws_receiver).await {
                 Ok(_) => {}
                 Err(err) => {
                     error!(error = %err, "stream failed");
@@ -101,6 +111,7 @@ pub async fn web_socket_stream(
 }
 
 async fn handle_ws(
+    app: Data<App>,
     mut user: AuthenticatedUser,
     mut ws_sender: Session,
     mut ws_receiver: MessageStream,
@@ -149,6 +160,7 @@ async fn handle_ws(
     // -- Get host
     let host_id = HostId(stream_request.host_id);
     let mut host = user.host(host_id).await?;
+    let (user_name, host_name) = admin_names(&mut user, &host).await;
 
     let host = host.use_host(&mut user).await?;
 
@@ -237,7 +249,7 @@ async fn handle_ws(
         audio_coupled_streams: audio_setup.coupled_streams,
         audio_samples_per_frame: audio_setup.samples_per_frame,
         audio_mapping: audio_setup.mapping,
-        app_name: app_title,
+        app_name: app_title.clone(),
     });
     info!(response = ?response, "sending response to client");
 
@@ -275,8 +287,32 @@ async fn handle_ws(
         return Err(AppError::StreamClosed);
     }
 
+    // Register the stream so the admin monitor lists it and can stop it.
+    // The receiver lives as long as the main loop, dropping it marks the stream as closed.
+    let (event_sender, event_receiver) = mpsc::channel(20);
+    let _registered_stream = Stream::new(
+        &app,
+        &user,
+        event_sender,
+        StreamInfo::new(
+            user_name,
+            host_id.0,
+            host_name,
+            app_title.clone().unwrap_or_default(),
+        ),
+    )
+    .await?;
+
     // main loop
-    if let Err(err) = ws_loop(ws_channel_sender, ws_receiver, stream, control_config).await {
+    if let Err(err) = ws_loop(
+        ws_channel_sender,
+        ws_receiver,
+        stream,
+        control_config,
+        event_receiver,
+    )
+    .await
+    {
         error!(error = %err, "web socket main loop errored, closing stream");
     }
 
@@ -288,6 +324,7 @@ async fn ws_loop(
     mut ws_receiver: MessageStream,
     mut stream: MoonlightStream,
     control_config: ControlPacketConfig,
+    mut event_receiver: mpsc::Receiver<ExternalStreamEvent>,
 ) -> Result<(), AppError> {
     let mut relay_stats_ticker = pin!(interval(Duration::from_secs(1)));
 
@@ -308,6 +345,16 @@ async fn ws_loop(
         delay_controller.update(Instant::now());
 
         select! {
+            Some(event) = event_receiver.recv() => {
+                match event {
+                    ExternalStreamEvent::Stop => {
+                        info!("stream stopped by an admin, stopping the host stream");
+                        ws_stopped = true;
+                        let _ = stream.disconnect();
+                    }
+                    ExternalStreamEvent::WebRTCAddIceCandidate { .. } => {}
+                }
+            }
             // drive the moonlight stream forward
             result = stream.drive() => {
                 let event = result?;
