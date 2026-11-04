@@ -21,12 +21,24 @@ set -euo pipefail
 D=/opt/moonlight-web
 B=/opt/moonlight-web.bak-$STAMP
 
+# v3 streams in-process, so there is no streamer process to look for: a stream is the only
+# thing that gives web-server UDP sockets (WebRTC ICE and the Moonlight RTP/control channels).
+# A v2 streamer process still counts.
+streaming() {
+    pgrep -x streamer >/dev/null && return 0
+    local pid
+    pid="$(pgrep -x web-server)" || return 1
+    # Not grep -q: exiting early can SIGPIPE ss and fail the pipeline under pipefail
+    ss -uanp | grep -F "pid=$pid," >/dev/null
+}
+
 if [ "$WAIT_IDLE" = 1 ]; then
     for _ in $(seq 1 240); do
-        pgrep -x streamer >/dev/null || break
+        streaming || break
+        echo "a stream is running, waiting"
         sleep 30
     done
-    if pgrep -x streamer >/dev/null; then echo "still streaming after 2 h, aborting"; exit 1; fi
+    if streaming; then echo "still streaming after 2 h, aborting"; exit 1; fi
 fi
 
 mkdir -p "$B"
