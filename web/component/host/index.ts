@@ -1,16 +1,19 @@
-import { DetailedHost, DetailedUser, UndetailedHost } from "../../api_bindings"
+import { DetailedHost, DetailedRole, DetailedUser, UndetailedHost } from "../../api_bindings"
 import { Api, apiDeleteHost, apiGetHost, isDetailedHost, apiPostPair, apiWakeUp, apiGetUser, apiPatchHost } from "../../api"
 import { Component, ComponentEvent } from "../index"
 import { getCurrentLanguage, getTranslations } from "../../i18n"
 import { setContextMenu } from "../context_menu"
 import { showNotification } from "../notification"
-import { showMessage } from "../modal/index"
+import { showMessage, showModal } from "../modal/index"
+import { getHostStreamSettings, hasHostStreamSettings, setHostStreamSettings } from "../settings_menu"
+import { HostSettingsModal } from "./settings_modal"
 import { HOST_IMAGE, HOST_OVERLAY_LOCK, HOST_OVERLAY_NONE, HOST_OVERLAY_OFFLINE } from "../../resources/index"
 
 export type HostEventListener = (event: ComponentEvent<Host>) => void
 
 export class Host implements Component {
     private api: Api
+    private getRole: () => DetailedRole
 
     private hostId: number
     private userCache: DetailedUser | null = null
@@ -22,8 +25,9 @@ export class Host implements Component {
     private imageOverlayElement: HTMLImageElement = document.createElement("img")
     private nameElement: HTMLElement = document.createElement("p")
 
-    constructor(api: Api, hostId: number, host: UndetailedHost | DetailedHost | null) {
+    constructor(api: Api, getRole: () => DetailedRole, hostId: number, host: UndetailedHost | DetailedHost | null) {
         this.api = api
+        this.getRole = getRole
 
         this.hostId = hostId
         this.cache = host
@@ -112,6 +116,17 @@ export class Host implements Component {
             callback: async () => this.forceFetch()
         })
 
+        elements.push({
+            name: i.streamSettings,
+            callback: this.editStreamSettings.bind(this)
+        })
+        if (hasHostStreamSettings(this.hostId)) {
+            elements.push({
+                name: i.resetStreamSettings,
+                callback: async () => setHostStreamSettings(this.hostId, null)
+            })
+        }
+
         if (this.cache?.server_state != null && this.cache?.paired == "NotPaired") {
             elements.push({
                 name: i.pair,
@@ -163,6 +178,20 @@ export class Host implements Component {
         this.updateCache(host, this.userCache)
 
         await showMessage(i.details(host))
+    }
+
+    private async editStreamSettings() {
+        const role = this.getRole()
+        const modal = new HostSettingsModal(
+            this.cache?.name ?? this.hostId.toString(),
+            role.permissions,
+            getHostStreamSettings(role.default_settings, this.hostId)
+        )
+
+        const settings = await showModal(modal)
+        if (settings) {
+            setHostStreamSettings(this.hostId, settings)
+        }
     }
 
     addHostRemoveListener(listener: HostEventListener, options?: EventListenerOptions) {

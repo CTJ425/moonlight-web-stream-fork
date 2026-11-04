@@ -5,7 +5,7 @@ import { InputComponent, SelectComponent } from "./component/input"
 import { FormModal } from "./component/modal/form"
 import { getModalBackground, Modal, showMessage, showModal } from "./component/modal/index"
 import { showNotification } from "./component/notification"
-import { dropLocalSettingsOnRoleChange, getLocalStreamSettings, setLocalStreamSettings, Settings, TransportType } from "./component/settings_menu"
+import { dropLocalSettingsOnRoleChange, getHostStreamSettings, getLocalStreamSettings, hasHostStreamSettings, setHostStreamSettings, setLocalStreamSettings, Settings, TransportType } from "./component/settings_menu"
 import { getSidebarRoot, setSidebar, setSidebarExtended, setSidebarStyle, Sidebar } from "./component/sidebar/index"
 import { adoptRoleDefaultLanguage, getCurrentLanguage, getTranslations, Language, normalizeLanguage } from "./i18n"
 import { requestKeyboardLock } from "./iframe"
@@ -191,7 +191,7 @@ class ViewerApp implements Component {
     constructor(api: Api, hostId: number, appId: number, bootstrapRole: DetailedRole, options?: Partial<Settings>) {
         this.api = api
 
-        const defaultSettings = getLocalStreamSettings(bootstrapRole.default_settings)
+        const defaultSettings = getHostStreamSettings(bootstrapRole.default_settings, hostId)
         const settings = {
             ...defaultSettings,
             ...options,
@@ -214,9 +214,15 @@ class ViewerApp implements Component {
             settings.touchControls,
             config => {
                 // Saved like the other settings, so the role defaults apply until the user changes them
-                const saved = getLocalStreamSettings(bootstrapRole.default_settings)
-                saved.touchControls = config
-                setLocalStreamSettings(saved)
+                if (hasHostStreamSettings(hostId)) {
+                    const saved = getHostStreamSettings(bootstrapRole.default_settings, hostId)
+                    saved.touchControls = config
+                    setHostStreamSettings(hostId, saved)
+                } else {
+                    const saved = getLocalStreamSettings(bootstrapRole.default_settings)
+                    saved.touchControls = config
+                    setLocalStreamSettings(saved)
+                }
             }
         )
         stopPropagationOn(this.touchControls.getElement())

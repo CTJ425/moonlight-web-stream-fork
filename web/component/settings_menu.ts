@@ -12,7 +12,7 @@ export type Settings = {
     sidebarEdge: SidebarEdge,
     hideSidebarButton: boolean,
     bitrate: number
-    videoSize: "720p" | "1080p" | "1440p" | "4k" | "native" | "custom"
+    videoSize: "240p" | "360p" | "480p" | "720p" | "1080p" | "1440p" | "4k" | "native" | "custom"
     videoSizeCustom: {
         width: number
         height: number
@@ -115,6 +115,35 @@ export function getLocalStreamSettings(defaultSettings: Settings) {
 }
 export function setLocalStreamSettings(settings?: Settings) {
     localStorage.setItem("mlSettings", JSON.stringify(settings))
+}
+
+// A host's own settings replace the browser settings for streams to that host
+function hostSettingsKey(hostId: number): string {
+    return `mlHostSettings:${hostId}`
+}
+export function hasHostStreamSettings(hostId: number): boolean {
+    return localStorage.getItem(hostSettingsKey(hostId)) != null
+}
+export function getHostStreamSettings(defaultSettings: Settings, hostId: number): Settings {
+    const settings = getLocalStreamSettings(defaultSettings)
+
+    try {
+        const json = localStorage.getItem(hostSettingsKey(hostId))
+        if (json) {
+            return deepMerge(settings, JSON.parse(json))
+        }
+    } catch (e) {
+        localStorage.removeItem(hostSettingsKey(hostId))
+    }
+
+    return settings
+}
+export function setHostStreamSettings(hostId: number, settings: Settings | null) {
+    if (settings) {
+        localStorage.setItem(hostSettingsKey(hostId), JSON.stringify(settings))
+    } else {
+        localStorage.removeItem(hostSettingsKey(hostId))
+    }
 }
 
 export type StreamSettingsChangeListener = (event: ComponentEvent<StreamSettingsComponent>) => void
@@ -276,6 +305,9 @@ export class StreamSettingsComponent implements Component {
         // Video Size
         this.videoSize = new SelectComponent("videoSize",
             [
+                { value: "240p", name: "240p" },
+                { value: "360p", name: "360p" },
+                { value: "480p", name: "480p" },
                 { value: "720p", name: "720p" },
                 { value: "1080p", name: "1080p" },
                 { value: "1440p", name: "1440p" },
