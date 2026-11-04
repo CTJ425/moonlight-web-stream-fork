@@ -1521,7 +1521,7 @@ dependencies = [
  "hyper",
  "libc",
  "pin-project-lite",
- "socket2 0.6.5",
+ "socket2 0.5.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -1850,7 +1850,7 @@ dependencies = [
 [[package]]
 name = "moonlight-common"
 version = "0.1.0"
-source = "git+https://github.com/CTJ425/moonlight-common-rust.git?rev=d4d12b481c13f33484116d6ce1385184c1ac213a#d4d12b481c13f33484116d6ce1385184c1ac213a"
+source = "git+https://github.com/CTJ425/moonlight-common-rust.git?rev=bf91ae9b36170c8d2643500bb7ff131dfd9dd9cb#bf91ae9b36170c8d2643500bb7ff131dfd9dd9cb"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -2313,7 +2313,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "log",
- "socket2 0.6.5",
+ "socket2 0.5.10",
  "windows-sys 0.61.2",
 ]
 
