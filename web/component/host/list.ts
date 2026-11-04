@@ -1,4 +1,4 @@
-import { DetailedHost, UndetailedHost } from "../../api_bindings.js"
+import { DetailedHost, DetailedRole, UndetailedHost } from "../../api_bindings.js"
 import { Api, apiGetHosts } from "../../api.js"
 import { ComponentEvent } from "../index.js"
 import { Host, HostEventListener } from "./index.js"
@@ -6,16 +6,18 @@ import { FetchListComponent } from "../fetch_list.js"
 
 export class HostList extends FetchListComponent<DetailedHost | UndetailedHost, Host> {
     private api: Api
+    private getRole: () => DetailedRole
 
     private eventTarget = new EventTarget()
 
-    constructor(api: Api) {
+    constructor(api: Api, getRole: () => DetailedRole) {
         super({
             listClasses: ["host-list"],
             elementLiClasses: ["animated-list-element", "host-element"]
         })
 
         this.api = api
+        this.getRole = getRole
     }
 
     async forceFetch() {
@@ -43,7 +45,7 @@ export class HostList extends FetchListComponent<DetailedHost | UndetailedHost, 
     }
 
     public insertList(dataId: number, data: DetailedHost | UndetailedHost | null): void {
-        const newHost = new Host(this.api, dataId, data)
+        const newHost = new Host(this.api, this.getRole, dataId, data)
 
         this.list.append(newHost)
 

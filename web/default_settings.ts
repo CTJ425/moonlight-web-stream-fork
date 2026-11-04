@@ -11,7 +11,7 @@ const trueDefaultSettings: Settings =
     "bitrate": 10000,
     "fps": 60,
     "videoFrameQueueSize": 3,
-    // possible values: "720p", "1080p", "1440p", "4k", "native", "custom"
+    // possible values: "240p", "360p", "480p", "720p", "1080p", "1440p", "4k", "native", "custom"
     "videoSize": "custom",
     // only works if videoSize=custom
     "videoSizeCustom": {

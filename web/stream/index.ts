@@ -34,7 +34,16 @@ export type InfoEventListener = (event: InfoEvent) => void
 
 export function getStreamerSize(settings: Settings, viewerScreenSize: [number, number]): [number, number] {
     let width, height
-    if (settings.videoSize == "720p") {
+    if (settings.videoSize == "240p") {
+        width = 426
+        height = 240
+    } else if (settings.videoSize == "360p") {
+        width = 640
+        height = 360
+    } else if (settings.videoSize == "480p") {
+        width = 854
+        height = 480
+    } else if (settings.videoSize == "720p") {
         width = 1280
         height = 720
     } else if (settings.videoSize == "1080p") {
