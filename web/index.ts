@@ -153,7 +153,7 @@ class MainApp implements Component {
         this.hostAddButton.addEventListener("click", this.addHost.bind(this))
 
         // Host list
-        this.hostList = new HostList(api)
+        this.hostList = new HostList(api, () => this.role ?? bootstrapRole)
         this.hostList.addHostOpenListener(this.onHostOpen.bind(this))
 
         // Settings Button
