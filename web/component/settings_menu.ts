@@ -296,8 +296,7 @@ export class StreamSettingsComponent implements Component {
         // Fps
         this.fps = new InputComponent("fps", "number", i.fps, {
             defaultValue: defaultSettings_.fps.toString(),
-            value: settings?.fps?.toString(),
-            step: "100"
+            value: settings?.fps?.toString()
         })
         this.fps.addChangeListener(this.onSettingsChange.bind(this))
         this.fps.mount(this.divElement)
