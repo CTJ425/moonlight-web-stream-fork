@@ -44,6 +44,7 @@ export const ptBR: Translations = {
     settings: {
         sidebar: "Barra Lateral",
         sidebarEdge: "Posição da Barra Lateral",
+        useGlobal: "Use global",
         hideSidebarButton: "Ocultar botão da barra lateral (aparece ao passar o mouse)",
         left: "Esquerda",
         right: "Direita",
@@ -171,6 +172,7 @@ export const ptBR: Translations = {
         streamSettings: "Configurações de Stream",
         resetStreamSettings: "Redefinir Configurações de Stream",
         streamSettingsFor: (name: string) => `Configurações de Stream: ${name}`,
+        streamSettingsHint: "Checked settings follow the global settings. Clear a checkbox to give this host its own value (marked in yellow).",
         failedToGetDetails: (id: number) => `falha ao obter detalhes do host ${id}`,
         wakeUpSent: "Pacote Wake-on-LAN enviado. Pode levar um momento para o PC ligar.",
         alreadyPaired: "Este host já está pareado!",

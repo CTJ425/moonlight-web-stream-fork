@@ -44,6 +44,7 @@ export const frFr: Translations = {
     settings: {
         sidebar: "Barre latérale",
         sidebarEdge: "Bord de la barre latérale",
+        useGlobal: "Use global",
         hideSidebarButton: "Masquer le bouton de la barre latérale (visible au survol)",
         left: "Gauche",
         right: "Droite",
@@ -171,6 +172,7 @@ export const frFr: Translations = {
         streamSettings: "Paramètres de stream",
         resetStreamSettings: "Réinitialiser les paramètres de stream",
         streamSettingsFor: (name: string) => `Paramètres de stream : ${name}`,
+        streamSettingsHint: "Checked settings follow the global settings. Clear a checkbox to give this host its own value (marked in yellow).",
         failedToGetDetails: (id: number) => `échec de la récupération des détails de l'hôte ${id}`,
         wakeUpSent: "Signal de réveil envoyé. Le PC peut prendre un peu de temps pour démarrer.",
         alreadyPaired: "Hôte déjà appairé !",

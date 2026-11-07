@@ -44,6 +44,7 @@ export const koKR: Translations = {
     settings: {
         sidebar: "사이드바",
         sidebarEdge: "사이드바 위치",
+        useGlobal: "Use global",
         hideSidebarButton: "사이드바 버튼 숨기기 (마우스를 올리면 표시)",
         left: "왼쪽",
         right: "오른쪽",
@@ -171,6 +172,7 @@ export const koKR: Translations = {
         streamSettings: "스트리밍 설정",
         resetStreamSettings: "스트리밍 설정 초기화",
         streamSettingsFor: (name: string) => `스트리밍 설정: ${name}`,
+        streamSettingsHint: "Checked settings follow the global settings. Clear a checkbox to give this host its own value (marked in yellow).",
         failedToGetDetails: (id: number) => `호스트 ${id}의 상세 정보를 가져오지 못했습니다.`,
         wakeUpSent: "매직 패킷을 전송했습니다. PC가 켜질 때까지 잠시 기다려 주세요.",
         alreadyPaired: "이 호스트는 이미 페어링되어 있습니다!",

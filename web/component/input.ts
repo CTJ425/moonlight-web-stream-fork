@@ -25,6 +25,10 @@ export class ElementWithLabel implements Component {
     mountBefore(parent: HTMLElement, before: ElementWithLabel): void {
         parent.insertBefore(this.div, before.div)
     }
+
+    getRoot(): HTMLDivElement {
+        return this.div
+    }
 }
 
 export type InputInit = {
@@ -264,6 +268,10 @@ export class SelectComponent extends ElementWithLabel {
                     throw "SelectComponent strategy is not polyfill"
                 }
 
+                if (this.strategy.wrapper.classList.contains("select-polyfill-disabled")) {
+                    return
+                }
+
                 this.setStrategyPolyfillOpened(!this.strategy.opened)
             })
 
@@ -409,6 +417,31 @@ export class SelectComponent extends ElementWithLabel {
         }
 
         throw "Invalid strategy for select input field"
+    }
+
+    setValue(value: string) {
+        if (this.strategy.name == "datalist") {
+            this.strategy.inputElement.value = this.options.find(option => option.value == value)?.name ?? ""
+        } else if (this.strategy.name == "select") {
+            this.strategy.optionRoot.value = value
+        } else if (this.strategy.name == "polyfill") {
+            this.strategy.value = value
+
+            this.updateStrategyPolyfill()
+        }
+    }
+
+    setEnabled(enabled: boolean) {
+        if (this.strategy.name == "datalist") {
+            this.strategy.inputElement.disabled = !enabled
+        } else if (this.strategy.name == "select") {
+            this.strategy.optionRoot.disabled = !enabled
+        } else if (this.strategy.name == "polyfill") {
+            this.strategy.wrapper.classList.toggle("select-polyfill-disabled", !enabled)
+            if (!enabled) {
+                this.setStrategyPolyfillOpened(false)
+            }
+        }
     }
 
     setOptionEnabled(value: string, enabled: boolean) {

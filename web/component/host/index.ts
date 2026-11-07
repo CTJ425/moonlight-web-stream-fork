@@ -5,7 +5,7 @@ import { getCurrentLanguage, getTranslations } from "../../i18n"
 import { setContextMenu } from "../context_menu"
 import { showNotification } from "../notification"
 import { showMessage, showModal } from "../modal/index"
-import { getHostStreamSettings, hasHostStreamSettings, setHostStreamSettings } from "../settings_menu"
+import { getHostStreamOverrides, getHostStreamSettings, getLocalStreamSettings, hasHostStreamSettings, HostSettingKey, setHostStreamOverrides } from "../settings_menu"
 import { HostSettingsModal } from "./settings_modal"
 import { HOST_IMAGE, HOST_OVERLAY_LOCK, HOST_OVERLAY_NONE, HOST_OVERLAY_OFFLINE } from "../../resources/index"
 
@@ -120,10 +120,10 @@ export class Host implements Component {
             name: i.streamSettings,
             callback: this.editStreamSettings.bind(this)
         })
-        if (hasHostStreamSettings(this.hostId)) {
+        if (hasHostStreamSettings(this.getRole().default_settings, this.hostId)) {
             elements.push({
                 name: i.resetStreamSettings,
-                callback: async () => setHostStreamSettings(this.hostId, null)
+                callback: async () => setHostStreamOverrides(this.hostId, null)
             })
         }
 
@@ -185,12 +185,14 @@ export class Host implements Component {
         const modal = new HostSettingsModal(
             this.cache?.name ?? this.hostId.toString(),
             role.permissions,
-            getHostStreamSettings(role.default_settings, this.hostId)
+            getLocalStreamSettings(role.default_settings),
+            getHostStreamSettings(role.default_settings, this.hostId),
+            Object.keys(getHostStreamOverrides(role.default_settings, this.hostId)) as Array<HostSettingKey>
         )
 
-        const settings = await showModal(modal)
-        if (settings) {
-            setHostStreamSettings(this.hostId, settings)
+        const overrides = await showModal(modal)
+        if (overrides) {
+            setHostStreamOverrides(this.hostId, overrides)
         }
     }
 

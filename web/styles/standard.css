@@ -1693,3 +1693,30 @@ canvas.video-stream {
 .touch-controls-active.touch-controls-suspended .touch-controls-buttons {
     display: none;
 }
+
+/** Host stream settings: each setting follows the global settings until its checkbox is cleared */
+.host-setting {
+    border-left: 3px solid rgba(255, 255, 255, 0.2);
+    padding-left: 8px;
+    margin: 8px 0;
+}
+.host-setting-overridden {
+    border-left-color: #ffc107;
+}
+.host-setting-use-global label {
+    font-size: 0.85em;
+    opacity: 0.8;
+}
+.host-setting input:disabled,
+.host-setting select:disabled {
+    opacity: 0.6;
+}
+.host-settings-hint {
+    font-size: 0.9em;
+    opacity: 0.8;
+    margin: 0 0 8px 0;
+}
+.select-polyfill-disabled {
+    opacity: 0.6;
+    pointer-events: none;
+}

@@ -117,33 +117,91 @@ export function setLocalStreamSettings(settings?: Settings) {
     localStorage.setItem("mlSettings", JSON.stringify(settings))
 }
 
-// A host's own settings replace the browser settings for streams to that host
+// A host overrides single settings and takes every other one from the browser settings,
+// so a change of the browser settings reaches all hosts that don't override that setting.
+// Sidebar, language, page style, controller and fullscreen settings belong to the browser, not to a host.
+export const HOST_SETTING_KEYS = [
+    "bitrate",
+    "fps",
+    // Includes videoSizeCustom
+    "videoSize",
+    "videoCodec",
+    "forceVideoElementRenderer",
+    "canvasRenderer",
+    "canvasVsync",
+    "hdr",
+    "playAudioLocal",
+    "microphone",
+    "mouseScrollMode",
+    "mouseMode",
+    "touchMode",
+    "localCursorSensitivity",
+    "touchControls",
+    "dataTransport",
+] as const
+export type HostSettingKey = typeof HOST_SETTING_KEYS[number]
+export type HostSettingOverrides = Partial<Settings>
+
 function hostSettingsKey(hostId: number): string {
     return `mlHostSettings:${hostId}`
 }
-export function hasHostStreamSettings(hostId: number): boolean {
-    return localStorage.getItem(hostSettingsKey(hostId)) != null
+function pickHostOverrides(source: any, keys: Iterable<HostSettingKey>): HostSettingOverrides {
+    const overrides: any = {}
+    for (const key of keys) {
+        if (source?.[key] === undefined) {
+            continue
+        }
+        overrides[key] = deepClone(source[key])
+        if (key == "videoSize" && source.videoSizeCustom !== undefined) {
+            overrides.videoSizeCustom = deepClone(source.videoSizeCustom)
+        }
+    }
+    return overrides
 }
-export function getHostStreamSettings(defaultSettings: Settings, hostId: number): Settings {
-    const settings = getLocalStreamSettings(defaultSettings)
-
+function hostValueEquals(key: HostSettingKey, a: any, b: any): boolean {
+    if (key == "videoSize" && a.videoSize == b.videoSize && a.videoSize != "custom") {
+        return true
+    }
+    if (key == "videoSize") {
+        return a.videoSize == b.videoSize && JSON.stringify(a.videoSizeCustom) == JSON.stringify(b.videoSizeCustom)
+    }
+    return JSON.stringify(a[key]) == JSON.stringify(b[key])
+}
+export function getHostStreamOverrides(defaultSettings: Settings, hostId: number): HostSettingOverrides {
     try {
         const json = localStorage.getItem(hostSettingsKey(hostId))
-        if (json) {
-            return deepMerge(settings, JSON.parse(json))
+        if (!json) {
+            return {}
         }
+        const stored = JSON.parse(json)
+        if (stored?.overrides && typeof stored.overrides == "object") {
+            return pickHostOverrides(stored.overrides, HOST_SETTING_KEYS)
+        }
+
+        // Hosts used to store a full copy of the settings: only what differs from the browser settings is the host's own
+        const global = getLocalStreamSettings(defaultSettings)
+        const migrated = pickHostOverrides(stored, HOST_SETTING_KEYS.filter(key =>
+            stored?.[key] !== undefined && !hostValueEquals(key, stored, global)
+        ))
+        setHostStreamOverrides(hostId, migrated)
+        return migrated
     } catch (e) {
         localStorage.removeItem(hostSettingsKey(hostId))
+        return {}
     }
-
-    return settings
 }
-export function setHostStreamSettings(hostId: number, settings: Settings | null) {
-    if (settings) {
-        localStorage.setItem(hostSettingsKey(hostId), JSON.stringify(settings))
+export function setHostStreamOverrides(hostId: number, overrides: HostSettingOverrides | null) {
+    if (overrides && Object.keys(overrides).length > 0) {
+        localStorage.setItem(hostSettingsKey(hostId), JSON.stringify({ overrides }))
     } else {
         localStorage.removeItem(hostSettingsKey(hostId))
     }
+}
+export function hasHostStreamSettings(defaultSettings: Settings, hostId: number): boolean {
+    return Object.keys(getHostStreamOverrides(defaultSettings, hostId)).length > 0
+}
+export function getHostStreamSettings(defaultSettings: Settings, hostId: number): Settings {
+    return Object.assign(getLocalStreamSettings(defaultSettings), getHostStreamOverrides(defaultSettings, hostId))
 }
 
 export type StreamSettingsChangeListener = (event: ComponentEvent<StreamSettingsComponent>) => void
@@ -237,7 +295,12 @@ export class StreamSettingsComponent implements Component {
 
     private useSelectElementPolyfill: InputComponent
 
-    constructor(permissions: StreamPermissions, settings: Settings) {
+    // Only set when editing the settings of one host
+    private hostGlobalSettings: Settings | null = null
+    private hostUseGlobal: Map<HostSettingKey, InputComponent> = new Map()
+
+    // With hostScope, only the host settings are shown, each one follows the global settings until its checkbox is cleared
+    constructor(permissions: StreamPermissions, settings: Settings, hostScope?: { globalSettings: Settings, overridden: Iterable<HostSettingKey> }) {
         // Sometimes the normal settings object doesn't have some values, because they change between versions.
         // Use those as fallback
         const defaultSettings_ = globalDefaultSettings()
@@ -607,19 +670,133 @@ export class StreamSettingsComponent implements Component {
         this.useSelectElementPolyfill.addChangeListener(this.onSettingsChange.bind(this))
         this.useSelectElementPolyfill.mount(this.divElement)
 
+        if (hostScope) {
+            this.setupHostScope(hostScope.globalSettings, new Set(hostScope.overridden), i.useGlobal)
+        }
+
         this.onSettingsChange()
     }
 
-    private onSettingsChange() {
-        if (this.videoSize.getValue() == "custom") {
-            this.videoSizeWidth.setEnabled(true)
-            this.videoSizeHeight.setEnabled(true)
-        } else {
-            this.videoSizeWidth.setEnabled(false)
-            this.videoSizeHeight.setEnabled(false)
+    private setupHostScope(globalSettings: Settings, overridden: Set<HostSettingKey>, useGlobalName: string) {
+        this.hostGlobalSettings = deepClone(globalSettings)
+        makeSettingsValid(this.permissions, this.hostGlobalSettings)
+
+        // Not host settings
+        for (const header of [this.sidebarHeader, this.controllerHeader]) {
+            this.divElement.removeChild(header)
+        }
+        for (const component of [
+            this.sidebarEdge, this.hideSidebarButton,
+            this.controllerInvertAB, this.controllerInvertXY, this.controllerSendIntervalOverride,
+            this.language, this.enterFullscreenOnStreamStart, this.toggleFullscreenWithKeybind,
+            this.pageStyle, this.useSelectElementPolyfill,
+        ]) {
+            component.unmount(this.divElement)
         }
 
+        for (const key of HOST_SETTING_KEYS) {
+            const useGlobal = new InputComponent(`hostUseGlobal-${key}`, "checkbox", useGlobalName, {
+                checked: !overridden.has(key)
+            })
+            useGlobal.addChangeListener(() => {
+                if (useGlobal.isChecked() && this.hostGlobalSettings) {
+                    this.writeHostSetting(key, this.hostGlobalSettings)
+                }
+                this.onSettingsChange()
+            })
+            useGlobal.getRoot().classList.add("host-setting-use-global")
+
+            // Group the checkbox with the setting it controls
+            const components = this.hostSettingComponents(key)
+            const group = document.createElement("div")
+            group.classList.add("host-setting")
+            this.divElement.insertBefore(group, components[0].getRoot())
+            useGlobal.mount(group)
+            for (const component of components) {
+                component.mount(group)
+            }
+
+            this.hostUseGlobal.set(key, useGlobal)
+        }
+    }
+
+    private hostSettingComponents(key: HostSettingKey): Array<InputComponent | SelectComponent> {
+        switch (key) {
+            case "videoSize":
+                return [this.videoSize, this.videoSizeWidth, this.videoSizeHeight]
+            case "touchControls":
+                return [this.touchControlsEnabled, ...this.touchControlsButtons.flatMap(({ label, key }) => [label, key])]
+            default:
+                return [this[key]]
+        }
+    }
+
+    private writeHostSetting(key: HostSettingKey, settings: Settings) {
+        switch (key) {
+            case "videoSize":
+                this.videoSize.setValue(settings.videoSize)
+                this.videoSizeWidth.setValue(settings.videoSizeCustom.width.toString())
+                this.videoSizeHeight.setValue(settings.videoSizeCustom.height.toString())
+                break
+            case "touchControls":
+                this.touchControlsEnabled.setChecked(settings.touchControls.enabled)
+                this.touchControlsButtons.forEach(({ label, key }, index) => {
+                    const button = settings.touchControls.buttons[index]
+                    if (button) {
+                        label.setValue(button.label)
+                        key.setValue(button.key.toString())
+                    }
+                })
+                break
+            case "forceVideoElementRenderer":
+            case "canvasRenderer":
+            case "canvasVsync":
+            case "hdr":
+            case "playAudioLocal":
+            case "microphone":
+                this[key].setChecked(settings[key])
+                break
+            default:
+                this[key].setValue(settings[key].toString())
+        }
+    }
+
+    private isHostGlobal(key: HostSettingKey): boolean {
+        return this.hostUseGlobal.get(key)?.isChecked() ?? false
+    }
+
+    private onSettingsChange() {
+        for (const [key, useGlobal] of this.hostUseGlobal) {
+            for (const component of this.hostSettingComponents(key)) {
+                component.setEnabled(!this.isHostGlobal(key))
+            }
+            useGlobal.getRoot().parentElement?.classList.toggle("host-setting-overridden", !this.isHostGlobal(key))
+        }
+        if (this.hostUseGlobal.size > 0 && !this.permissions.allow_hdr) {
+            this.hdr.setEnabled(false)
+        }
+
+        const videoSizeEditable = !this.isHostGlobal("videoSize") && this.videoSize.getValue() == "custom"
+        this.videoSizeWidth.setEnabled(videoSizeEditable)
+        this.videoSizeHeight.setEnabled(videoSizeEditable)
+
         this.divElement.dispatchEvent(new ComponentEvent("ml-settingschange", this))
+    }
+
+    // Only the settings this host doesn't take from the global settings
+    getHostOverrides(): HostSettingOverrides {
+        const settings = this.getStreamSettings()
+        const overrides: any = {}
+        for (const key of HOST_SETTING_KEYS) {
+            if (this.isHostGlobal(key)) {
+                continue
+            }
+            overrides[key] = settings[key]
+            if (key == "videoSize") {
+                overrides.videoSizeCustom = settings.videoSizeCustom
+            }
+        }
+        return overrides
     }
 
     addChangeListener(listener: StreamSettingsChangeListener) {

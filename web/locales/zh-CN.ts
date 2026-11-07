@@ -44,6 +44,7 @@ export const zhCN: Translations = {
     settings: {
         sidebar: "侧边栏",
         sidebarEdge: "侧边栏位置",
+        useGlobal: "Use global",
         hideSidebarButton: "隐藏侧边栏按钮（悬停时显示）",
         left: "左",
         right: "右",
@@ -171,6 +172,7 @@ export const zhCN: Translations = {
         streamSettings: "串流设置",
         resetStreamSettings: "重置串流设置",
         streamSettingsFor: (name: string) => `串流设置：${name}`,
+        streamSettingsHint: "Checked settings follow the global settings. Clear a checkbox to give this host its own value (marked in yellow).",
         failedToGetDetails: (id: number) => `无法获取主机 ${id} 的详情`,
         wakeUpSent: "已发送唤醒包。你的电脑可能需要一点时间才能启动。",
         alreadyPaired: "该主机已经配对！",

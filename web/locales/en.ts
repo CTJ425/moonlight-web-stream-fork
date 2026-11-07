@@ -42,6 +42,7 @@ export const en = {
     settings: {
         sidebar: "Sidebar",
         sidebarEdge: "Sidebar Edge",
+        useGlobal: "Use global",
         hideSidebarButton: "Hide Sidebar Button (reveal on hover)",
         left: "Left",
         right: "Right",
@@ -169,6 +170,7 @@ export const en = {
         streamSettings: "Stream Settings",
         resetStreamSettings: "Reset Stream Settings",
         streamSettingsFor: (name: string) => `Stream Settings: ${name}`,
+        streamSettingsHint: "Checked settings follow the global settings. Clear a checkbox to give this host its own value (marked in yellow).",
         failedToGetDetails: (id: number) => `failed to get details for host ${id}`,
         wakeUpSent: "Sent Wake Up packet. It might take a moment for your pc to start.",
         alreadyPaired: "This host is already paired!",

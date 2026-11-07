@@ -5,7 +5,7 @@ import { InputComponent, SelectComponent } from "./component/input"
 import { FormModal } from "./component/modal/form"
 import { getModalBackground, Modal, showMessage, showModal } from "./component/modal/index"
 import { showNotification } from "./component/notification"
-import { dropLocalSettingsOnRoleChange, getHostStreamSettings, getLocalStreamSettings, hasHostStreamSettings, setHostStreamSettings, setLocalStreamSettings, Settings, TransportType } from "./component/settings_menu"
+import { dropLocalSettingsOnRoleChange, getHostStreamOverrides, getHostStreamSettings, getLocalStreamSettings, setHostStreamOverrides, setLocalStreamSettings, Settings, TransportType } from "./component/settings_menu"
 import { getSidebarRoot, setSidebar, setSidebarExtended, setSidebarStyle, Sidebar } from "./component/sidebar/index"
 import { adoptRoleDefaultLanguage, getCurrentLanguage, getTranslations, Language, normalizeLanguage } from "./i18n"
 import { requestKeyboardLock } from "./iframe"
@@ -214,10 +214,10 @@ class ViewerApp implements Component {
             settings.touchControls,
             config => {
                 // Saved like the other settings, so the role defaults apply until the user changes them
-                if (hasHostStreamSettings(hostId)) {
-                    const saved = getHostStreamSettings(bootstrapRole.default_settings, hostId)
-                    saved.touchControls = config
-                    setHostStreamSettings(hostId, saved)
+                const overrides = getHostStreamOverrides(bootstrapRole.default_settings, hostId)
+                if (overrides.touchControls) {
+                    overrides.touchControls = config
+                    setHostStreamOverrides(hostId, overrides)
                 } else {
                     const saved = getLocalStreamSettings(bootstrapRole.default_settings)
                     saved.touchControls = config
